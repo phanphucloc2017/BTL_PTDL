@@ -1,8 +1,10 @@
 """
-Dashboard phân tích hiệu quả quảng cáo – Shopee Sale 5.5
+Phân tích quảng cáo – Shopee Sale 5.5
 Chạy:  streamlit run app.py
-Dữ liệu: shopee_5_5_cleaned.csv (xuất ra từ notebook làm sạch dữ liệu)
+Đọc file CSV đã làm sạch (xuất từ notebook). Có thể tải nhiều file, các file đã tải
+được giữ trong danh sách ở thanh bên để xem lại (danh sách mất khi tải lại trang).
 """
+from datetime import datetime
 from pathlib import Path
 
 import altair as alt
@@ -10,233 +12,310 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Shopee 5.5 – Marketing Analytics", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Phân tích quảng cáo Shopee 5.5", layout="wide")
+st.markdown("""
+<style>
+[data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.07);
+                          padding: 10px 14px; border-radius: 6px;}
+h1 {font-size: 1.7rem !important;}
+h2, h3 {font-size: 1.2rem !important;}
+</style>""", unsafe_allow_html=True)
 
 DATA_FILE = Path(__file__).parent / "shopee_5_5_cleaned.csv"
-COLORS = {"Facebook": "#1877f2", "TikTok": "#111111", "Google": "#34a853",
+COLORS = {"Facebook": "#1877f2", "TikTok": "#222222", "Google": "#34a853",
           "Instagram": "#c13584", "Shopee Ads": "#ee4d2d"}
-METRIC_HELP = {
-    "ROAS": "Doanh thu / Chi phí (cao hơn = tốt hơn)",
-    "CPA": "Chi phí / Đơn chuyển đổi (thấp hơn = tốt hơn)",
-    "CVR_%": "Đơn / Click (cao hơn = tốt hơn)",
-    "CTR_%": "Click / Lượt hiển thị (cao hơn = tốt hơn)",
-    "CPC": "Chi phí / Click (thấp hơn = tốt hơn)",
-    "AOV": "Doanh thu / Đơn (giá trị trung bình mỗi đơn)",
+COLOR_SCALE = alt.Scale(domain=list(COLORS), range=list(COLORS.values()))
+NEED_COLS = ["campaign_name", "platform", "ad_set", "spend", "clicks", "impressions", "conversions",
+             "revenue", "date", "ROAS", "ad_set_group", "phase", "day_type"]
+# tên chỉ số: (giải thích, True nếu càng cao càng tốt)
+METRICS = {
+    "ROAS": ("doanh thu trên mỗi 1 đồng chi quảng cáo", True),
+    "CPA": ("chi phí để có 1 đơn hàng", False),
+    "CVR (%)": ("trong 100 lượt click thì có bao nhiêu đơn", True),
+    "CTR (%)": ("trong 100 lượt hiển thị thì có bao nhiêu lượt click", True),
+    "CPC": ("chi phí cho mỗi lượt click", False),
+    "AOV": ("giá trị trung bình của một đơn hàng", True),
 }
 
 
-# ------------------------------------------------------------------ dữ liệu
-@st.cache_data
-def load_data(file) -> pd.DataFrame:
-    df = pd.read_csv(file, encoding="utf-8-sig", parse_dates=["date"])
-    df["adset_platform"] = df["ad_set"] + " (" + df["platform"] + ")"
-    return df
+# ---------------------------------------------------------------- hàm dùng chung
+def vn(x, d=2):
+    """Định dạng số kiểu Việt Nam: 1.204.095 và 4,99."""
+    if pd.isna(x):
+        return "–"
+    return f"{x:,.{d}f}".replace(",", "#").replace(".", ",").replace("#", ".")
 
 
-def ratio(g: pd.DataFrame, num: str, den: str) -> float:
-    """Tổng num / tổng den, chỉ trên các dòng có đủ cả hai giá trị."""
+def ratio(g, num, den):
+    """Tổng num / tổng den, chỉ lấy các dòng có đủ cả hai giá trị."""
     m = g[num].notna() & g[den].notna()
     d = g.loc[m, den].sum()
     return g.loc[m, num].sum() / d if m.any() and d > 0 else np.nan
 
 
-def summarize(data: pd.DataFrame, by: str) -> pd.DataFrame:
+def summarize(data, by):
     rows = []
-    for k, g in data.groupby(by, observed=True, dropna=True):
-        rows.append({
-            by: k,
-            "Số chiến dịch": len(g),
-            "Tổng spend": g["spend"].sum(),
-            "Tổng revenue": g["revenue"].sum(),
-            "CTR_%": ratio(g, "clicks", "impressions") * 100,
-            "CPC": ratio(g, "spend", "clicks"),
-            "CVR_%": ratio(g, "conversions", "clicks") * 100,
-            "CPA": ratio(g, "spend", "conversions"),
-            "AOV": ratio(g, "revenue", "conversions"),
-            "ROAS": ratio(g, "revenue", "spend"),
-        })
+    for k, g in data.groupby(by, dropna=True):
+        rows.append({by: k, "Số chiến dịch": len(g), "Tổng chi phí": g["spend"].sum(),
+                     "Tổng doanh thu": g["revenue"].sum(),
+                     "CTR (%)": ratio(g, "clicks", "impressions") * 100, "CPC": ratio(g, "spend", "clicks"),
+                     "CVR (%)": ratio(g, "conversions", "clicks") * 100, "CPA": ratio(g, "spend", "conversions"),
+                     "AOV": ratio(g, "revenue", "conversions"), "ROAS": ratio(g, "revenue", "spend")})
     return pd.DataFrame(rows).set_index(by)
 
 
-def fmt(x, d=2):
-    return "–" if pd.isna(x) else f"{x:,.{d}f}"
+def read_clean_csv(file):
+    df = pd.read_csv(file, encoding="utf-8-sig")
+    missing = [c for c in NEED_COLS if c not in df.columns]
+    if missing:
+        raise ValueError("thiếu cột " + ", ".join(missing) + ". Cần dùng file CSV đã chạy qua notebook làm sạch.")
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["adset_platform"] = df["ad_set"] + " (" + df["platform"] + ")"
+    return df
 
 
-# ------------------------------------------------------------------ nạp file
-st.title("📊 Phân tích hiệu quả quảng cáo – Shopee Sale 5.5")
-st.caption("Marketing Analytics · 1.000 chiến dịch · 28/04/2024 – 10/05/2024 · "
-           "Facebook, TikTok, Google, Instagram, Shopee Ads")
+def metric_chart(d, cat, metric, horizontal=False, height=320):
+    """Biểu đồ cột có ghi số trên cột. d có cột `cat`, `metric`, `platform`."""
+    val = alt.Y(field=metric, type="quantitative", title=metric) if not horizontal else \
+        alt.X(field=metric, type="quantitative", title=metric)
+    ax = alt.Y(field=cat, type="nominal", sort=None, title="") if horizontal else \
+        alt.X(field=cat, type="nominal", sort=None, title="")
+    enc = dict(color=alt.Color("platform:N", scale=COLOR_SCALE, legend=None if not horizontal else alt.Legend(title="Nền tảng")),
+               tooltip=[cat, alt.Tooltip(field=metric, type="quantitative", format=".2f"), "Số chiến dịch"])
+    bars = alt.Chart(d).mark_bar().encode(**({"y": ax, "x": val} if horizontal else {"x": ax, "y": val}), **enc)
+    txt_kw = dict(align="left", dx=4) if horizontal else dict(dy=-7)
+    txt = alt.Chart(d).mark_text(fontSize=11, **txt_kw).encode(
+        **({"y": ax, "x": val} if horizontal else {"x": ax, "y": val}),
+        text=alt.Text(field=metric, type="quantitative", format=".2f"))
+    return (bars + txt).properties(height=height)
 
-uploaded = st.sidebar.file_uploader("Dùng file dữ liệu sạch khác (CSV)", type="csv")
-if uploaded is not None:
-    df_all = load_data(uploaded)
-elif DATA_FILE.exists():
-    df_all = load_data(DATA_FILE)
-else:
-    st.error("Không tìm thấy `shopee_5_5_cleaned.csv`. Hãy đặt file cùng thư mục với app.py "
-             "hoặc tải lên ở thanh bên.")
+
+# ---------------------------------------------------------------- lịch sử file đã tải
+ss = st.session_state
+
+
+def label(n):
+    f = ss.files[n]
+    return f"{n} · {vn(len(f['df']), 0)} dòng · {f['time']:%H:%M}"
+
+
+if "files" not in ss:
+    ss.files, ss.seen = {}, set()
+    if DATA_FILE.exists():
+        ss.files["Shopee 5.5 (file mẫu)"] = {"df": read_clean_csv(DATA_FILE), "time": datetime.now()}
+        ss.pick = label("Shopee 5.5 (file mẫu)")
+
+st.sidebar.header("Dữ liệu")
+uploads = st.sidebar.file_uploader("Tải file CSV đã làm sạch", type="csv", accept_multiple_files=True)
+for f in uploads or []:
+    sig = (f.name, f.size)
+    if sig in ss.seen:
+        continue
+    try:
+        data = read_clean_csv(f)
+    except Exception as e:                      # file sai định dạng: báo lỗi, không thêm vào danh sách
+        st.sidebar.error(f"{f.name}: {e}")
+        continue
+    name, n = f.name, 2
+    while name in ss.files:
+        name, n = f"{f.name} ({n})", n + 1
+    ss.files[name] = {"df": data, "time": datetime.now()}
+    ss.seen.add(sig)
+    ss.pick = label(name)                       # file mới tải lên thì tự chuyển sang xem file đó
+
+names = list(ss.files)
+st.title("Phân tích quảng cáo – Shopee Sale 5.5")
+if not names:
+    st.write("Chưa có dữ liệu. Hãy tải một file CSV đã làm sạch ở thanh bên.")
     st.stop()
 
-# ------------------------------------------------------------------ bộ lọc
-st.sidebar.header("Bộ lọc")
-platforms = st.sidebar.multiselect("Nền tảng", sorted(df_all["platform"].unique()),
-                                   default=sorted(df_all["platform"].unique()))
-groups = st.sidebar.multiselect("Nhóm ad set", sorted(df_all["ad_set_group"].unique()),
-                                default=sorted(df_all["ad_set_group"].unique()))
-camps = st.sidebar.multiselect("Tên chiến dịch", sorted(df_all["campaign_name"].unique()),
-                               default=sorted(df_all["campaign_name"].unique()))
-dmin, dmax = df_all["date"].min().date(), df_all["date"].max().date()
-d_from, d_to = st.sidebar.date_input("Khoảng ngày", value=(dmin, dmax), min_value=dmin, max_value=dmax)
-keep_nodate = st.sidebar.checkbox("Giữ cả dòng thiếu ngày", value=True)
+labels = {label(n): n for n in names}
+if ss.get("pick") not in labels:
+    ss.pick = list(labels)[-1]
+pick = st.sidebar.radio("Các file đã tải lên (bấm để xem lại)", list(labels), key="pick")
+cur = labels[pick]
+st.sidebar.caption("Danh sách chỉ lưu trong phiên làm việc hiện tại, tải lại trang sẽ mất.")
+df_all = ss.files[cur]["df"]
+d_min, d_max = df_all["date"].min(), df_all["date"].max()
+st.caption(f"Đang xem: {cur} · {vn(len(df_all), 0)} chiến dịch"
+           + (f" · từ {d_min:%d/%m/%Y} đến {d_max:%d/%m/%Y}" if pd.notna(d_min) else ""))
 
-mask = (df_all["platform"].isin(platforms) & df_all["ad_set_group"].isin(groups)
-        & df_all["campaign_name"].isin(camps))
-in_range = df_all["date"].between(pd.Timestamp(d_from), pd.Timestamp(d_to))
-mask &= in_range | (df_all["date"].isna() & keep_nodate)
+# ---------------------------------------------------------------- bộ lọc (nhớ riêng cho từng file)
+st.sidebar.header("Lọc dữ liệu")
+opts = lambda c: sorted(df_all[c].dropna().unique())
+sel_p = st.sidebar.multiselect("Nền tảng", opts("platform"), default=opts("platform"), key=f"{cur}|p")
+sel_g = st.sidebar.multiselect("Nhóm ad set", opts("ad_set_group"), default=opts("ad_set_group"), key=f"{cur}|g")
+sel_c = st.sidebar.multiselect("Tên chiến dịch", opts("campaign_name"), default=opts("campaign_name"), key=f"{cur}|c")
+mask = df_all["platform"].isin(sel_p) & df_all["ad_set_group"].isin(sel_g) & df_all["campaign_name"].isin(sel_c)
+if pd.notna(d_min):
+    rng = st.sidebar.date_input("Khoảng ngày", (d_min.date(), d_max.date()), d_min.date(), d_max.date(), key=f"{cur}|d")
+    keep = st.sidebar.checkbox("Giữ cả dòng bị thiếu ngày", True, key=f"{cur}|k")
+    if len(rng) == 2:
+        mask &= df_all["date"].between(pd.Timestamp(rng[0]), pd.Timestamp(rng[1])) | (df_all["date"].isna() & keep)
 df = df_all[mask]
-
 if df.empty:
-    st.warning("Không có dữ liệu với bộ lọc hiện tại.")
+    st.warning("Không có dòng nào khớp với bộ lọc hiện tại.")
     st.stop()
 
-# ------------------------------------------------------------------ KPI
-st.subheader("Chỉ số tổng quan")
-kpi = {
-    "ROAS": ratio(df, "revenue", "spend"), "CPA": ratio(df, "spend", "conversions"),
-    "CVR_%": ratio(df, "conversions", "clicks") * 100, "CTR_%": ratio(df, "clicks", "impressions") * 100,
-}
-base = {
-    "ROAS": ratio(df_all, "revenue", "spend"), "CPA": ratio(df_all, "spend", "conversions"),
-    "CVR_%": ratio(df_all, "conversions", "clicks") * 100, "CTR_%": ratio(df_all, "clicks", "impressions") * 100,
-}
+# ---------------------------------------------------------------- chỉ số chính
+roas, cpa = ratio(df, "revenue", "spend"), ratio(df, "spend", "conversions")
+cvr, ctr = ratio(df, "conversions", "clicks") * 100, ratio(df, "clicks", "impressions") * 100
+roas0, cpa0 = ratio(df_all, "revenue", "spend"), ratio(df_all, "spend", "conversions")
+cvr0 = ratio(df_all, "conversions", "clicks") * 100
+
 c = st.columns(6)
-c[0].metric("Số chiến dịch", f"{len(df):,}")
-c[1].metric("Tổng chi phí", fmt(df["spend"].sum(), 0))
-c[2].metric("Tổng doanh thu", fmt(df["revenue"].sum(), 0))
-for col, (name, val) in zip(c[3:], list(kpi.items())[:3]):
-    delta = None if pd.isna(val) or pd.isna(base[name]) else f"{val - base[name]:+.2f} so với toàn đợt"
-    col.metric(name, fmt(val), delta, delta_color="inverse" if name == "CPA" else "normal")
-st.caption("ROAS, CPA, CVR… được tính ở mức tổng hợp, chỉ trên các dòng đủ dữ liệu cho từng chỉ số.")
+c[0].metric("Số chiến dịch", vn(len(df), 0))
+c[1].metric("Tổng chi phí", vn(df["spend"].sum(), 0))
+c[2].metric("Tổng doanh thu", vn(df["revenue"].sum(), 0))
+c[3].metric("ROAS", vn(roas), f"{roas - roas0:+.2f} so với cả file".replace(".", ",") if len(df) < len(df_all) else None)
+c[4].metric("CPA", vn(cpa), f"{cpa - cpa0:+.2f} so với cả file".replace(".", ",") if len(df) < len(df_all) else None,
+            delta_color="inverse")
+c[5].metric("CVR", vn(cvr) + "%", f"{cvr - cvr0:+.2f} điểm so với cả file".replace(".", ",") if len(df) < len(df_all) else None)
+st.caption("ROAS = doanh thu / chi phí. CPA = chi phí / số đơn. CVR = số đơn / số click. "
+           "Các tỉ lệ được tính trên tổng của các dòng có đủ dữ liệu, dòng nào thiếu số thì bỏ qua cho chỉ số đó.")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["Nền tảng", "Ad set", "Theo thời gian", "Mô phỏng ngân sách", "Dữ liệu"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Nền tảng", "Ad set", "Theo thời gian", "Chuyển ngân sách", "Dữ liệu"])
 
-# ------------------------------------------------------------------ Tab 1
+# ---------------------------------------------------------------- tab nền tảng
 with tab1:
     by_p = summarize(df, "platform")
-    metric = st.selectbox("Chỉ số", list(METRIC_HELP), key="m1", help="Chọn chỉ số để so sánh")
-    st.caption(METRIC_HELP[metric])
-    d = by_p.reset_index().sort_values(metric, ascending=metric == "CPA" or metric == "CPC")
-    chart = (alt.Chart(d).mark_bar().encode(
-        x=alt.X("platform:N", sort=None, title=""), y=alt.Y(f"{metric}:Q", title=metric),
-        color=alt.Color("platform:N", scale=alt.Scale(domain=list(COLORS), range=list(COLORS.values())), legend=None),
-        tooltip=["platform", alt.Tooltip(f"{metric}:Q", format=".2f"), "Số chiến dịch"])
-        .properties(height=340))
-    st.altair_chart(chart, width="stretch")
+    metric = st.selectbox("Chỉ số muốn so sánh", list(METRICS), key="m1")
+    note, higher_better = METRICS[metric]
+    st.write(f"**{metric}**: {note}. " + ("Càng cao càng tốt." if higher_better else "Càng thấp càng tốt."))
+    d = by_p.reset_index().sort_values(metric, ascending=not higher_better)
+    st.altair_chart(metric_chart(d, "platform", metric), width="stretch")
 
+    if len(d) > 1:
+        best, worst = d.iloc[0], d.iloc[-1]
+        st.write(f"Nền tảng tốt nhất theo {metric} là **{best['platform']}** ({vn(best[metric])}), "
+                 f"kém nhất là **{worst['platform']}** ({vn(worst[metric])}).")
+
+    st.subheader("Chi phí và doanh thu: ai chiếm bao nhiêu?")
+    st.write("Nếu cột doanh thu thấp hơn cột chi phí, nền tảng đó đang tốn nhiều ngân sách hơn phần doanh thu nó mang lại.")
     both = df.dropna(subset=["spend", "revenue"]).groupby("platform")[["spend", "revenue"]].sum()
-    share = pd.DataFrame({"Chi phí": both["spend"] / both["spend"].sum() * 100,
-                          "Doanh thu": both["revenue"] / both["revenue"].sum() * 100}).reset_index()
-    share = share.melt("platform", var_name="Loại", value_name="Tỉ trọng (%)")
-    st.markdown("**Tỉ trọng chi phí vs doanh thu**: nền tảng nào chiếm nhiều ngân sách hơn phần doanh thu mang lại?")
-    ch2 = (alt.Chart(share).mark_bar().encode(
-        x=alt.X("platform:N", title=""), y="Tỉ trọng (%):Q",
-        xOffset="Loại:N", color=alt.Color("Loại:N", scale=alt.Scale(range=["#9aa5b1", "#0b6bcb"])),
-        tooltip=["platform", "Loại", alt.Tooltip("Tỉ trọng (%):Q", format=".1f")]).properties(height=300))
-    st.altair_chart(ch2, width="stretch")
+    share = (both / both.sum() * 100).rename(columns={"spend": "Chi phí", "revenue": "Doanh thu"}).reset_index()
+    sh = share.melt("platform", var_name="Loại", value_name="Tỉ trọng (%)")
+    base = alt.Chart(sh).encode(x=alt.X("platform:N", title=""), xOffset="Loại:N")
+    bars = base.mark_bar().encode(y="Tỉ trọng (%):Q", color=alt.Color("Loại:N", scale=alt.Scale(range=["#9aa5b1", "#0b6bcb"])))
+    lab = base.mark_text(dy=-7, fontSize=11).encode(y="Tỉ trọng (%):Q", text=alt.Text("Tỉ trọng (%):Q", format=".1f"))
+    st.altair_chart((bars + lab).properties(height=300), width="stretch")
+    if len(share) > 1:
+        share["lệch"] = share["Doanh thu"] - share["Chi phí"]
+        w = share.sort_values("lệch").iloc[0]
+        if w["lệch"] < -1:
+            st.write(f"**{w['platform']}** chiếm {vn(w['Chi phí'], 1)}% chi phí nhưng chỉ đem lại {vn(w['Doanh thu'], 1)}% doanh thu.")
     st.dataframe(by_p.sort_values("ROAS", ascending=False).style.format("{:,.2f}"), width="stretch")
 
-# ------------------------------------------------------------------ Tab 2
+# ---------------------------------------------------------------- tab ad set
 with tab2:
+    st.write("Ad set là nhóm quảng cáo (cách nhắm đối tượng hoặc hình thức hiển thị). "
+             "Retargeting và Discovery xuất hiện ở hai nền tảng nên được tách riêng, ghi kèm tên nền tảng trong ngoặc.")
     by_a = summarize(df, "adset_platform")
     by_a["platform"] = by_a.index.str.rsplit("(", n=1).str[-1].str.rstrip(")")
-    metric2 = st.selectbox("Chỉ số", list(METRIC_HELP), key="m2")
-    min_n = st.slider("Chỉ hiện ad set có tối thiểu … chiến dịch", 1, 60, 10)
-    d2 = by_a[by_a["Số chiến dịch"] >= min_n].reset_index().sort_values(
-        metric2, ascending=metric2 in ("CPA", "CPC"))
-    ch3 = (alt.Chart(d2).mark_bar().encode(
-        y=alt.Y("adset_platform:N", sort=None, title=""), x=alt.X(f"{metric2}:Q", title=metric2),
-        color=alt.Color("platform:N", scale=alt.Scale(domain=list(COLORS), range=list(COLORS.values())), title="Nền tảng"),
-        tooltip=["adset_platform", alt.Tooltip(f"{metric2}:Q", format=".2f"), "Số chiến dịch"])
-        .properties(height=max(300, 22 * len(d2))))
-    st.altair_chart(ch3, width="stretch")
-    st.caption("Lưu ý: Retargeting và Discovery tồn tại ở 2 nền tảng nên được tách riêng theo cặp (ad set, nền tảng).")
+    metric2 = st.selectbox("Chỉ số", list(METRICS), key="m2")
+    min_n = st.slider("Chỉ hiện ad set có ít nhất … chiến dịch", 1, 60, 10,
+                      help="Ad set có quá ít chiến dịch thì số liệu dễ bị lệch, nên nên đặt mức tối thiểu.")
+    hb2 = METRICS[metric2][1]
+    d2 = by_a[by_a["Số chiến dịch"] >= min_n].reset_index().sort_values(metric2, ascending=not hb2)
+    if d2.empty:
+        st.write("Không có ad set nào đủ số chiến dịch tối thiểu, hãy kéo thanh trượt xuống thấp hơn.")
+    else:
+        st.altair_chart(metric_chart(d2.rename(columns={"adset_platform": "Ad set"}), "Ad set", metric2,
+                                     horizontal=True, height=max(300, 24 * len(d2))), width="stretch")
+        st.write(f"Tốt nhất: **{d2.iloc[0]['adset_platform']}** ({vn(d2.iloc[0][metric2])}). "
+                 f"Kém nhất: **{d2.iloc[-1]['adset_platform']}** ({vn(d2.iloc[-1][metric2])}).")
 
-    st.markdown("**Heatmap ROAS trung vị: nhóm ad set × nền tảng**")
+    st.subheader("ROAS theo nhóm ad set và nền tảng")
+    st.write("Mỗi ô là ROAS trung vị của một nhóm ad set trên một nền tảng; màu đậm hơn là hiệu quả tốt hơn. Ô trống là nền tảng đó không có nhóm này.")
     pv = df.pivot_table(index="ad_set_group", columns="platform", values="ROAS", aggfunc="median").reset_index()
     pv = pv.melt("ad_set_group", var_name="platform", value_name="ROAS").dropna()
-    hm = alt.Chart(pv).mark_rect().encode(
-        x="platform:N", y=alt.Y("ad_set_group:N", title=""),
-        color=alt.Color("ROAS:Q", scale=alt.Scale(scheme="yellowgreenblue")),
-        tooltip=["ad_set_group", "platform", alt.Tooltip("ROAS:Q", format=".2f")])
-    txt = alt.Chart(pv).mark_text(fontSize=12).encode(
-        x="platform:N", y="ad_set_group:N", text=alt.Text("ROAS:Q", format=".2f"))
-    st.altair_chart((hm + txt).properties(height=300), width="stretch")
+    hm = alt.Chart(pv).mark_rect().encode(x=alt.X("platform:N", title=""), y=alt.Y("ad_set_group:N", title=""),
+                                          color=alt.Color("ROAS:Q", scale=alt.Scale(scheme="yellowgreenblue")))
+    tx = alt.Chart(pv).mark_text(fontSize=12).encode(x="platform:N", y="ad_set_group:N",
+                                                    text=alt.Text("ROAS:Q", format=".2f"))
+    st.altair_chart((hm + tx).properties(height=300), width="stretch")
 
-# ------------------------------------------------------------------ Tab 3
+# ---------------------------------------------------------------- tab thời gian
 with tab3:
     dd = df.dropna(subset=["date"])
-    daily = summarize(dd, "date").reset_index()
-    long = daily.melt("date", value_vars=["Tổng spend", "Tổng revenue"], var_name="Loại", value_name="Giá trị")
-    sale_rule = alt.Chart(pd.DataFrame({"date": [pd.Timestamp("2024-05-05")]})).mark_rule(
-        color="black", strokeDash=[4, 4]).encode(x="date:T")
-    top = (alt.Chart(long).mark_bar().encode(
-        x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")), y="Giá trị:Q", xOffset="Loại:N",
-        color=alt.Color("Loại:N", scale=alt.Scale(range=["#9aa5b1", "#0b6bcb"])),
-        tooltip=["date:T", "Loại", alt.Tooltip("Giá trị:Q", format=",.0f")]) + sale_rule
-    ).properties(height=260, title="Chi phí và doanh thu theo ngày (đường đứt = ngày sale 5/5)")
-    line = (alt.Chart(daily).mark_line(point=True, color="#ee4d2d").encode(
-        x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")),
-        y=alt.Y("ROAS:Q", scale=alt.Scale(domain=[0, 7])),
-        tooltip=["date:T", alt.Tooltip("ROAS:Q", format=".2f")]) + sale_rule
-    ).properties(height=200, title="ROAS theo ngày (trục bắt đầu từ 0 để không phóng đại dao động)")
-    st.altair_chart(top & line, width="stretch")
+    if dd.empty:
+        st.write("Không có dòng nào có ngày hợp lệ trong bộ lọc hiện tại.")
+    else:
+        daily = summarize(dd, "date").reset_index()
+        sale = pd.DataFrame({"date": [pd.Timestamp("2024-05-05")], "nhãn": ["Ngày sale 5/5"]})
+        rule = alt.Chart(sale).mark_rule(color="black", strokeDash=[4, 4]).encode(x="date:T")
+        rtxt = alt.Chart(sale).mark_text(align="left", dx=4, baseline="top", fontSize=11).encode(
+            x="date:T", y=alt.value(2), text="nhãn:N")
+        st.write("**Chi phí và doanh thu mỗi ngày.** Cột xám là tiền bỏ ra, cột xanh là tiền thu về; khoảng cách giữa hai cột càng lớn thì ngày đó càng có lời.")
+        long = daily.melt("date", value_vars=["Tổng chi phí", "Tổng doanh thu"], var_name="Loại", value_name="Giá trị")
+        top = alt.Chart(long).mark_bar().encode(
+            x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")), y=alt.Y("Giá trị:Q", title=""), xOffset="Loại:N",
+            color=alt.Color("Loại:N", scale=alt.Scale(range=["#9aa5b1", "#0b6bcb"])),
+            tooltip=["date:T", "Loại", alt.Tooltip("Giá trị:Q", format=",.0f")])
+        st.altair_chart((top + rule + rtxt).properties(height=260), width="stretch")
 
-    st.markdown("**Trước / trong / sau ngày sale 5/5**")
+        st.write("**ROAS mỗi ngày.** Trục bắt đầu từ 0 để không làm các dao động nhỏ trông lớn hơn thực tế. "
+                 "Đường nét đứt là ROAS trung bình của cả giai đoạn đang xem.")
+        avg = pd.DataFrame({"ROAS": [roas]})
+        line = alt.Chart(daily).mark_line(point=True, color="#ee4d2d").encode(
+            x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")),
+            y=alt.Y("ROAS:Q", scale=alt.Scale(domain=[0, 7])),
+            tooltip=["date:T", alt.Tooltip("ROAS:Q", format=".2f")])
+        avg_rule = alt.Chart(avg).mark_rule(color="gray", strokeDash=[3, 3]).encode(y="ROAS:Q")
+        st.altair_chart((line + avg_rule + rule).properties(height=200), width="stretch")
+
+    st.subheader("Trước, trong và sau ngày sale")
     st.dataframe(summarize(df.dropna(subset=["phase"]), "phase").style.format("{:,.2f}"), width="stretch")
-    st.markdown("**Cuối tuần vs ngày thường**")
+    st.subheader("Cuối tuần và ngày thường")
     st.dataframe(summarize(df.dropna(subset=["day_type"]), "day_type").style.format("{:,.2f}"), width="stretch")
 
-# ------------------------------------------------------------------ Tab 4
+# ---------------------------------------------------------------- tab chuyển ngân sách
 with tab4:
-    st.markdown("**Mô phỏng:** chuyển một phần ngân sách từ nền tảng nguồn sang các nền tảng đích.")
-    st.info("Giả định đơn giản: ROAS của mỗi nền tảng giữ nguyên khi đổi ngân sách. "
-            "Thực tế ROAS thường giảm khi tăng chi, nên kết quả chỉ mang tính minh họa.")
-    by_p2 = summarize(df, "platform")
-    plats = list(by_p2.index)
-    col_a, col_b = st.columns(2)
-    src = col_a.selectbox("Nền tảng nguồn (giảm ngân sách)", plats,
-                          index=plats.index("TikTok") if "TikTok" in plats else 0)
-    dest_opts = [p for p in plats if p != src]
-    default_dest = [p for p in ["Facebook", "Shopee Ads"] if p in dest_opts] or dest_opts[:1]
-    dest = col_b.multiselect("Nền tảng đích (tăng ngân sách)", dest_opts, default=default_dest)
-    pct = st.slider("% ngân sách chuyển đi", 0, 30, 10)
-
-    if dest:
-        sp = df.dropna(subset=["spend", "revenue"]).groupby("platform")["spend"].sum()
-        total_rev = df.dropna(subset=["spend", "revenue"])["revenue"].sum()
-        roas_dest = (by_p2.loc[dest, "ROAS"] * sp[dest]).sum() / sp[dest].sum()
-        moved = sp[src] * pct / 100
-        gain = moved * (roas_dest - by_p2.loc[src, "ROAS"])
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric(f"ROAS {src}", fmt(by_p2.loc[src, "ROAS"]))
-        m2.metric("ROAS bình quân nền tảng đích", fmt(roas_dest))
-        m3.metric("Ngân sách chuyển", fmt(moved, 0))
-        m4.metric("Doanh thu tăng thêm", fmt(gain, 0), f"{gain / total_rev * 100:+.2f}% tổng doanh thu")
-
-        sweep = pd.DataFrame({"% chuyển": range(0, 31, 5)})
-        sweep["Doanh thu tăng thêm"] = sweep["% chuyển"] / 100 * sp[src] * (roas_dest - by_p2.loc[src, "ROAS"])
-        st.altair_chart(alt.Chart(sweep).mark_line(point=True, color="#0b6bcb").encode(
-            x="% chuyển:Q", y="Doanh thu tăng thêm:Q",
-            tooltip=["% chuyển", alt.Tooltip("Doanh thu tăng thêm:Q", format=",.0f")]).properties(height=260),
-            width="stretch")
+    st.write("Thử xem nếu bớt tiền ở một nền tảng rồi dồn sang nơi hiệu quả hơn thì doanh thu thay đổi ra sao. "
+             "Phép tính giả định ROAS của mỗi nền tảng giữ nguyên khi đổi ngân sách. Thực tế tăng chi thường làm ROAS giảm, "
+             "nên đây chỉ là ước lượng cho thấy hướng đi, không phải con số chắc chắn.")
+    bp = summarize(df, "platform")
+    plats = list(bp.index)
+    a, b = st.columns(2)
+    src = a.selectbox("Bớt ngân sách ở", plats, index=plats.index("TikTok") if "TikTok" in plats else 0)
+    others = [p for p in plats if p != src]
+    dest = b.multiselect("Dồn sang", others, default=[p for p in ["Facebook", "Shopee Ads"] if p in others] or others[:1])
+    pct = st.slider("Chuyển bao nhiêu % ngân sách của nền tảng nguồn", 0, 30, 10)
+    if not dest:
+        st.write("Hãy chọn ít nhất một nền tảng để dồn ngân sách sang.")
     else:
-        st.warning("Hãy chọn ít nhất một nền tảng đích.")
+        ok = df.dropna(subset=["spend", "revenue"])
+        sp = ok.groupby("platform")["spend"].sum()
+        roas_dest = (bp.loc[dest, "ROAS"] * sp[dest]).sum() / sp[dest].sum()
+        per_pct = sp[src] / 100 * (roas_dest - bp.loc[src, "ROAS"])      # doanh thu tăng thêm cho mỗi 1%
+        gain = per_pct * pct
+        m = st.columns(4)
+        m[0].metric(f"ROAS của {src}", vn(bp.loc[src, "ROAS"]))
+        m[1].metric("ROAS bình quân nơi nhận", vn(roas_dest))
+        m[2].metric("Số tiền chuyển", vn(sp[src] * pct / 100, 0))
+        m[3].metric("Doanh thu tăng thêm", vn(gain, 0), f"{gain / ok['revenue'].sum() * 100:+.2f}% tổng doanh thu".replace(".", ","))
+        sweep = pd.DataFrame({"pct": range(0, 31, 5)})
+        sweep["gain"] = sweep["pct"] * per_pct
+        ln = alt.Chart(sweep).mark_line(point=True, color="#0b6bcb").encode(
+            x=alt.X("pct:Q", title="% ngân sách chuyển đi"), y=alt.Y("gain:Q", title="Doanh thu tăng thêm"),
+            tooltip=["pct", alt.Tooltip("gain:Q", format=",.0f")])
+        cur_pt = alt.Chart(pd.DataFrame({"pct": [pct], "gain": [gain]})).mark_point(size=120, color="#ee4d2d", filled=True).encode(
+            x="pct:Q", y="gain:Q")
+        st.altair_chart((ln + cur_pt).properties(height=260), width="stretch")
+        st.caption("Chấm đỏ là mức bạn đang chọn. Đường thẳng vì mô phỏng giả định ROAS không đổi.")
 
-# ------------------------------------------------------------------ Tab 5
+# ---------------------------------------------------------------- tab dữ liệu
 with tab5:
-    st.write(f"{len(df):,} dòng sau khi lọc")
-    st.dataframe(df.drop(columns=["adset_platform"]), width="stretch", height=420)
-    st.download_button("Tải dữ liệu đã lọc (CSV)",
-                       df.drop(columns=["adset_platform"]).to_csv(index=False).encode("utf-8-sig"),
-                       "shopee_5_5_filtered.csv", "text/csv")
+    st.subheader("Các file đã tải trong phiên này")
+    hist = pd.DataFrame([{
+        "File": n, "Số dòng": len(v["df"]), "Tải lúc": v["time"].strftime("%H:%M:%S"),
+        "Tổng chi phí": v["df"]["spend"].sum(), "ROAS chung": ratio(v["df"], "revenue", "spend"),
+        "Đang xem": "✓" if n == cur else ""} for n, v in ss.files.items()])
+    st.dataframe(hist.style.format({"Số dòng": "{:,}", "Tổng chi phí": "{:,.0f}", "ROAS chung": "{:.2f}"}),
+                 width="stretch", hide_index=True)
+    st.subheader("Dữ liệu đang xem")
+    st.write(f"{vn(len(df), 0)} dòng sau khi lọc")
+    show = df.drop(columns=["adset_platform"])
+    st.dataframe(show, width="stretch", height=380)
+    st.download_button("Tải dữ liệu đã lọc (CSV)", show.to_csv(index=False).encode("utf-8-sig"),
+                       "du_lieu_da_loc.csv", "text/csv")
