@@ -12,11 +12,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from cleaning import RAW_COLS, clean_raw
+
 st.set_page_config(page_title="Phân tích quảng cáo Shopee 5.5", layout="wide")
 st.markdown("""
 <style>
 [data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.07);
                           padding: 10px 14px; border-radius: 6px;}
+[data-testid="stAppDeployButton"], .stDeployButton {display: none !important;}
 h1 {font-size: 1.7rem !important;}
 h2, h3 {font-size: 1.2rem !important;}
 </style>""", unsafe_allow_html=True)
@@ -64,14 +67,35 @@ def summarize(data, by):
     return pd.DataFrame(rows).set_index(by)
 
 
-def read_clean_csv(file):
-    df = pd.read_csv(file, encoding="utf-8-sig")
-    missing = [c for c in NEED_COLS if c not in df.columns]
-    if missing:
-        raise ValueError("thiếu cột " + ", ".join(missing) + ". Cần dùng file CSV đã chạy qua notebook làm sạch.")
+def _read(file, **kw):
+    name = str(getattr(file, "name", file)).lower()
+    if name.endswith((".xlsx", ".xls")):
+        return pd.read_excel(file, **kw)
+    return pd.read_csv(file, encoding="utf-8-sig", **kw)
+
+
+def load_upload(file):
+    """Trả về (bảng dữ liệu đã sạch, báo cáo làm sạch hoặc None).
+    - File đã chạy qua notebook (có đủ cột ROAS, phase...): dùng luôn.
+    - File gốc chưa làm sạch: tự làm sạch và trả kèm báo cáo.
+    - File khác: báo thiếu cột."""
+    try:
+        head = _read(file, dtype=str)
+    except Exception:
+        raise ValueError("không đọc được file này như một bảng dữ liệu. Hãy dùng file CSV hoặc Excel (.xlsx).")
+    log = None
+    if all(c in head.columns for c in NEED_COLS):
+        if hasattr(file, "seek"):
+            file.seek(0)
+        df = _read(file)
+    else:
+        missing = [c for c in RAW_COLS if c not in head.columns]
+        if missing:
+            raise ValueError("thiếu cột " + ", ".join(missing) + ". File cần có đủ các cột: " + ", ".join(RAW_COLS) + ".")
+        df, log = clean_raw(head)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["adset_platform"] = df["ad_set"] + " (" + df["platform"] + ")"
-    return df
+    return df, log
 
 
 def metric_chart(d, cat, metric, horizontal=False, height=320):
@@ -102,31 +126,35 @@ def label(n):
 if "files" not in ss:
     ss.files, ss.seen = {}, set()
     if DATA_FILE.exists():
-        ss.files["Shopee 5.5 (file mẫu)"] = {"df": read_clean_csv(DATA_FILE), "time": datetime.now()}
+        d0, l0 = load_upload(DATA_FILE)
+        ss.files["Shopee 5.5 (file mẫu)"] = {"df": d0, "log": l0, "time": datetime.now()}
         ss.pick = label("Shopee 5.5 (file mẫu)")
 
 st.sidebar.header("Dữ liệu")
-uploads = st.sidebar.file_uploader("Tải file CSV đã làm sạch", type="csv", accept_multiple_files=True)
+uploads = st.sidebar.file_uploader("Tải file dữ liệu (CSV hoặc Excel)", type=["csv", "xlsx"], accept_multiple_files=True)
+st.sidebar.caption("File gốc chưa làm sạch sẽ được làm sạch tự động khi tải lên.")
 for f in uploads or []:
     sig = (f.name, f.size)
     if sig in ss.seen:
         continue
     try:
-        data = read_clean_csv(f)
+        data, log = load_upload(f)
     except Exception as e:                      # file sai định dạng: báo lỗi, không thêm vào danh sách
         st.sidebar.error(f"{f.name}: {e}")
         continue
     name, n = f.name, 2
     while name in ss.files:
         name, n = f"{f.name} ({n})", n + 1
-    ss.files[name] = {"df": data, "time": datetime.now()}
+    ss.files[name] = {"df": data, "log": log, "time": datetime.now()}
     ss.seen.add(sig)
     ss.pick = label(name)                       # file mới tải lên thì tự chuyển sang xem file đó
 
 names = list(ss.files)
-st.title("Phân tích quảng cáo – Shopee Sale 5.5")
+st.title("Dashboard đánh giá hiệu quả quảng cáo – Shopee Sale 5.5")
+st.caption("So sánh hiệu quả các nền tảng và nhóm quảng cáo, theo dõi diễn biến theo ngày "
+           "và thử chuyển ngân sách giữa các nền tảng.")
 if not names:
-    st.write("Chưa có dữ liệu. Hãy tải một file CSV đã làm sạch ở thanh bên.")
+    st.write("Chưa có dữ liệu. Hãy tải một file CSV hoặc Excel ở thanh bên.")
     st.stop()
 
 labels = {label(n): n for n in names}
@@ -139,6 +167,9 @@ df_all = ss.files[cur]["df"]
 d_min, d_max = df_all["date"].min(), df_all["date"].max()
 st.caption(f"Đang xem: {cur} · {vn(len(df_all), 0)} chiến dịch"
            + (f" · từ {d_min:%d/%m/%Y} đến {d_max:%d/%m/%Y}" if pd.notna(d_min) else ""))
+
+if ss.files[cur].get("log"):
+    st.caption("File này là file gốc và đã được làm sạch tự động khi tải lên. Xem chi tiết ở tab Dữ liệu.")
 
 # ---------------------------------------------------------------- bộ lọc (nhớ riêng cho từng file)
 st.sidebar.header("Lọc dữ liệu")
@@ -265,9 +296,15 @@ with tab3:
         st.altair_chart((line + avg_rule + rule).properties(height=200), width="stretch")
 
     st.subheader("Trước, trong và sau ngày sale")
-    st.dataframe(summarize(df.dropna(subset=["phase"]), "phase").style.format("{:,.2f}"), width="stretch")
+    if df["phase"].notna().any():
+        st.dataframe(summarize(df.dropna(subset=["phase"]), "phase").style.format("{:,.2f}"), width="stretch")
+    else:
+        st.write("Không có dòng nào có ngày trong bộ lọc hiện tại.")
     st.subheader("Cuối tuần và ngày thường")
-    st.dataframe(summarize(df.dropna(subset=["day_type"]), "day_type").style.format("{:,.2f}"), width="stretch")
+    if df["day_type"].notna().any():
+        st.dataframe(summarize(df.dropna(subset=["day_type"]), "day_type").style.format("{:,.2f}"), width="stretch")
+    else:
+        st.write("Không có dòng nào có ngày trong bộ lọc hiện tại.")
 
 # ---------------------------------------------------------------- tab chuyển ngân sách
 with tab4:
@@ -306,10 +343,18 @@ with tab4:
 
 # ---------------------------------------------------------------- tab dữ liệu
 with tab5:
+    log = ss.files[cur].get("log")
+    if log:
+        st.subheader("Báo cáo làm sạch của file đang xem")
+        st.write("Đây là những gì app đã sửa trên file gốc trước khi phân tích. Các quy tắc giống với notebook làm sạch.")
+        st.dataframe(pd.DataFrame(log, columns=["Hạng mục", "Kết quả"]), width="stretch", hide_index=True)
+        st.download_button("Tải file đã làm sạch (CSV)", df_all.drop(columns=["adset_platform"]).to_csv(index=False).encode("utf-8-sig"),
+                           "du_lieu_da_lam_sach.csv", "text/csv")
     st.subheader("Các file đã tải trong phiên này")
     hist = pd.DataFrame([{
         "File": n, "Số dòng": len(v["df"]), "Tải lúc": v["time"].strftime("%H:%M:%S"),
         "Tổng chi phí": v["df"]["spend"].sum(), "ROAS chung": ratio(v["df"], "revenue", "spend"),
+        "Nguồn": "làm sạch tự động" if v.get("log") else "đã làm sạch sẵn",
         "Đang xem": "✓" if n == cur else ""} for n, v in ss.files.items()])
     st.dataframe(hist.style.format({"Số dòng": "{:,}", "Tổng chi phí": "{:,.0f}", "ROAS chung": "{:.2f}"}),
                  width="stretch", hide_index=True)
