@@ -20,7 +20,7 @@ BTL/
 ├── [Huydata] shopee_sale_5_5_cleandata.xlsx   ← dữ liệu gốc
 ├── Shopee_5_5_Marketing_Analytics.ipynb       ← notebook: làm sạch + phân tích (đã chạy sẵn kết quả)
 ├── shopee_5_5_cleaned.csv                     ← dữ liệu đã làm sạch (notebook xuất ra, dashboard đọc)
-├── app.py                                     ← dashboard (giao diện)
+├── app2.py                                    ← web: đăng nhập, phân quyền, dashboard, đề xuất, cảnh báo, mô phỏng
 ├── cleaning.py                                ← bộ làm sạch dữ liệu dùng trong dashboard
 ├── requirements.txt                           ← thư viện cho dashboard
 ├── .streamlit/config.toml                     ← cấu hình ẩn nút Deploy
@@ -67,16 +67,28 @@ Mở notebook rồi chọn **Run All**. Chạy xong sẽ tạo thư mục `chart
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app2.py
 ```
 
 Trình duyệt tự mở `http://localhost:8501`. Dừng bằng `Ctrl + C` ở cửa sổ terminal.
 
-Nếu báo `'streamlit' is not recognized`, dùng `python -m streamlit run app.py`.
+Nếu báo `'streamlit' is not recognized`, dùng `python -m streamlit run app2.py`.
 
 Dashboard gồm bộ lọc (nền tảng, nhóm ad set, tên chiến dịch, khoảng ngày), các chỉ số chính và 5 tab: Nền tảng, Ad set, Theo thời gian, Chuyển ngân sách, Dữ liệu.
 
 Có thể tải thẳng file CSV hoặc Excel **gốc chưa làm sạch**: dashboard tự làm sạch (cùng quy tắc với notebook) và hiện báo cáo đã sửa những gì ở tab Dữ liệu. Có thể tải nhiều file lần lượt; các file đã tải hiện trong danh sách ở thanh bên để bấm xem lại (bộ lọc của từng file được nhớ riêng). Danh sách chỉ lưu trong phiên làm việc, tải lại trang sẽ mất.
+
+## Đăng nhập và phân quyền
+
+Web có 3 vai trò. Tài khoản thử (mật khẩu đều là `123`): `director` (Giám đốc), `user` (Chuyên viên), `admin` (Quản trị).
+
+| Vai trò | Chức năng riêng |
+|---|---|
+| Giám đốc | Doanh thu trừ chi phí QC và tỉ trọng chi phí/doanh thu, mô phỏng What-If, khuyến nghị 70/20/10, phê duyệt đề xuất |
+| Chuyên viên | Tạo đề xuất, xem và xóa đề xuất của mình (khi còn chờ duyệt), trợ lý tiếp thị (dựa trên quy tắc) |
+| Quản trị | Quản lý tài khoản, đặt ngưỡng cảnh báo KPI, khảo sát nâng cấp, xem nhật ký làm sạch dữ liệu |
+
+Mọi vai trò đều xem được dashboard, cảnh báo KPI, phân tích nền tảng, ad set (có phân hạng), xu hướng thời gian và bảng dữ liệu. Tài khoản, đề xuất và ngưỡng KPI được lưu trong bộ nhớ của server và dùng chung giữa các phiên; tắt app thì mất. Đây là mô hình minh họa: phân quyền ở tầng giao diện, mật khẩu chưa mã hóa.
 
 ## 5. Các chỉ số sử dụng
 

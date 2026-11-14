@@ -1,0 +1,158 @@
+================================================================================
+           HỆ THỐNG OMNIMARKET AI - MARKETING INTELLIGENCE & DSS
+      TÀI LIỆU MÔ TẢ CHỨC NĂNG VÀ CẤU TRÚC PHÂN QUYỀN HỆ THỐNG (RBAC)
+================================================================================
+
+I. TỔNG QUAN ĐỊNH VỊ HỆ THỐNG
+--------------------------------------------------------------------------------
+OmniMarket AI là hệ thống quản trị, phân tích dữ liệu tiếp thị đa nền tảng và hỗ
+trợ ra quyết định (Decision Support System - DSS). Hệ thống được kiến trúc hóa
+dựa trên mô hình phân quyền chặt chẽ theo vai trò (Role-Based Access Control - RBAC)
+nhằm tối ưu hóa dòng chảy công việc từ khâu Kỹ thuật/Tác nghiệp đến Chiến lược/Phê duyệt
+và Vận hành/Kiểm toán.
+
+Cấu trúc hệ thống phân làm 3 cấp độ:
+1. Cấp Chiến Lược & Tài Chính: Giám Đốc (Director / CEO / CMO)
+2. Cấp Tác Nghiệp & Thực Thi: Nhân Viên (User / Media Buyer / MKT Executive)
+3. Cấp Vận Hành & Hệ Thống: Quản Trị Viên (System & Data Admin)
+
+
+================================================================================
+II. CHI TIẾT CHỨC NĂNG TỪNG VAI TRÒ
+================================================================================
+
+1. GIÁM ĐỐC (DIRECTOR / CEO / CMO) - GÓC NHÌN CHIẾN LƯỢC & TÀI CHÍNH
+--------------------------------------------------------------------------------
+Vai trò này dành cho cấp lãnh đạo quản trị dòng vốn, đánh giá hiệu quả kinh doanh
+và ra quyết định phân bổ ngân sách.
+
+a. Trung Tâm Phê Duyệt Dự Án & Cấp Ngân Sách (Project Approval Hub):
+   - Tiếp nhận trực tiếp các đề xuất dự án/kế hoạch marketing do chuyên viên gửi lên.
+   - Thông tin đánh giá minh bạch: Ngân sách xin cấp, Doanh thu mục tiêu, ROAS
+     dự kiến và Luận cứ chiến lược (dựa trên số liệu thực tế đã phân tích).
+   - Thao tác trực tiếp 1-chạm: Bấm "Phê Duyệt & Cấp Vốn" hoặc "Từ Chối" kèm lời nhắn,
+     ý kiến chỉ đạo chuyển tiếp ngược lại cho nhân viên.
+   - Theo dõi tổng ngân sách đã giải ngân và số lượng hồ sơ dự án đang chờ xử lý.
+
+b. Báo Cáo Tài Chính P&L & Tỷ Trọng Đầu Tư:
+   - Nắm bắt bức tranh tổng thể: Tổng chi phí (Spend), Tổng doanh thu (Revenue),
+     Lợi nhuận gộp tạm tính, ROAS toàn sàn và CPA bình quân.
+   - Biểu đồ Cân cân tỷ trọng (Spend vs. Revenue Share): So sánh % chi phí bỏ ra
+     so với % doanh thu mang lại theo từng nền tảng (Facebook, TikTok, Google,
+     Shopee Ads, Instagram) để nhận diện kênh đốt ngân sách nhưng hiệu quả kém.
+
+c. Bộ Mô Phỏng What-If Tái Cấu Trúc Dòng Vốn:
+   - Thiết lập kịch bản giả lập trực quan: Cắt giảm X% ngân sách từ kênh hiệu quả
+     thấp (như TikTok) để tái đầu tư vào kênh có biên lợi nhuận vượt trội (như Shopee
+     Ads hoặc Facebook).
+   - Dự báo tức thì: Số tiền dịch chuyển, Chênh lệch ROAS ròng và Doanh thu gia tăng
+     ước tính (tuyệt đối và %).
+
+d. Chiến Lược Phân Bổ Ngân Sách Mẫu 70/20/10:
+   - 70% Ngân sách Trụ cột (Core Performance): Facebook (Prospecting, Lookalike) và
+     Shopee Ads (Product Boost, Keyword Auto) với ROAS ổn định > 5.7x, CPA < 20k.
+   - 20% Ngân sách Mở rộng (Growth): Tối ưu Google Search/PMAX để hạ CPC, giữ chân
+     tệp khách hàng có CVR cao (7.0%).
+   - 10% Ngân sách Thử nghiệm (Experimentation): Thu hẹp video/livestream TikTok,
+     chỉ giữ nhóm có ROAS dương để xây dựng thương hiệu.
+
+
+2. NHÂN VIÊN (USER / MEDIA BUYER) - GÓC NHÌN TÁC NGHIỆP & PHÂN TÍCH
+--------------------------------------------------------------------------------
+Vai trò dành cho đội ngũ chuyên viên chạy ads, tối ưu chiến dịch trực tiếp và lập
+kế hoạch đề xuất ngân sách.
+
+a. Quản Lý & Theo Dõi Đề Xuất ("Đề Xuất Của Tôi"):
+   - Theo dõi danh sách toàn bộ dự án do chính user tạo ra.
+   - Cập nhật trạng thái thời gian thực: Chờ duyệt (Cam), Đã duyệt (Xanh), Từ chối (Đỏ).
+   - Xem phản hồi, chỉ đạo trực tiếp từ Giám đốc để biết lý do được cấp vốn hoặc từ chối.
+   - Quyền chủ động hủy/xóa đề xuất: Nhân viên có thể tự tay xóa dự án khỏi hệ thống
+     khi kế hoạch thay đổi hoặc không còn phù hợp.
+
+b. Biểu Mẫu Soạn Thảo Đề Xuất Dự Án Mới:
+   - Nhập thông tin dự án xin ngân sách: Tên dự án, Kênh triển khai, Ngân sách đề xuất,
+   - Doanh thu kỳ vọng (tự động tính ROAS dự kiến) và Luận cứ chiến lược.
+   - Gửi đề xuất trực tiếp lên bàn làm việc của Giám đốc chỉ với 1 thao tác.
+
+c. Cố Vấn Tiếp Thị AI Trực Tuyến (Marketing AI Assistant):
+   - Hộp thoại trò chuyện trực tiếp với AI thông minh trên giao diện.
+   - Truy vấn dữ liệu nhanh: Hỏi kênh có CPA thấp nhất, hỏi nhóm ad set có ROAS cao nhất,
+     hỏi giải pháp khi TikTok không hiệu quả.
+   - Nhờ AI tư vấn luận cứ số liệu để chuẩn bị hồ sơ trình Giám đốc duyệt.
+
+d. Phân Tích Chi Tiết Nhóm Quảng Cáo (Ad Set x Nền Tảng):
+   - Đánh giá chi tiết từng nhóm nhắm mục tiêu: Lookalike, Retargeting, Search,
+     Product Boost, Video View,... qua các chỉ số CTR, CPC, CVR, CPA, ROAS, AOV.
+   - Heatmap ROAS trung vị giúp xác định cặp (Nhóm Ad Set x Nền Tảng) mạnh nhất.
+
+e. Theo Dõi Xu Hướng Thời Gian:
+   - Biểu đồ biến động chi phí, doanh thu và ROAS theo từng ngày trong chu kỳ Sale.
+   - So sánh hiệu quả 3 giai đoạn: Trước Sale, Ngày Sale chính và Sau Sale để cân
+     chỉnh lịch chạy quảng cáo.
+
+
+3. QUẢN TRỊ VIÊN (ADMIN) - GÓC NHÌN HỆ THỐNG & KIỂM TOÁN DỮ LIỆU
+--------------------------------------------------------------------------------
+Vai trò dành cho quản trị viên hệ thống, kỹ sư dữ liệu phụ trách vận hành, bảo mật
+và chất lượng số liệu.
+
+a. Quản Trị Người Dùng & Phân Quyền (RBAC Management):
+   - Xem toàn bộ danh sách tài khoản người dùng trong doanh nghiệp kèm quyền hạn.
+   - Biểu mẫu thêm mới tài khoản: Đặt username, password, họ tên và gán vai trò
+     trực tiếp (Director, User, Admin).
+
+b. Nhật Ký Kiểm Toán Làm Sạch Dữ Liệu (Data Quality Audit Log):
+   - Theo dõi minh bạch báo cáo làm sạch dữ liệu tự động:
+     + Chuẩn hóa biến thể tên nền tảng (30 biến thể về 5 kênh chuẩn).
+     + Xử lý đảo dấu các dòng chi phí âm (Spend < 0).
+     + Xử lý các dòng chi phí bằng 0 (gán NaN để không làm lệch chỉ số).
+     + Loại trừ các dòng hiển thị bất thường (Clicks > Impressions).
+     + Lọc các dòng conversions ngoại lai vượt ngưỡng logic.
+     + Chuẩn hóa ngày tháng về định dạng datetime hợp lệ.
+   - Quan sát bảng dữ liệu đã làm sạch trước khi đưa vào phân tích.
+
+c. Thiết Lập Ngưỡng Cảnh Báo KPI Toàn Doanh Nghiệp:
+   - Cài đặt mức sàn ROAS tối thiểu kỳ vọng và mức trần CPA tối đa chấp nhận được.
+   - Hệ thống dựa vào đây để tự động gán cờ cảnh báo các chiến dịch không đạt chuẩn.
+
+d. Báo Cáo Sức Khỏe & Khảo Sát Nâng Cấp Hệ Thống:
+   - Theo dõi phiên bản vận hành, số tài khoản và số lượng hồ sơ dự án lưu trữ.
+   - Thu thập ý kiến biểu quyết nâng cấp các tính năng trong tương lai (Kết nối API
+     tự động, Tích hợp Machine Learning dự báo doanh thu, Gửi thông báo qua Zalo/Telegram).
+
+
+================================================================================
+III. MA TRẬN PHÂN QUYỀN HỆ THỐNG (PERMISSION MATRIX)
+================================================================================
+
++---------------------------------------------+----------+--------+---------+
+| CHỨC NĂNG / QUYỀN HẠN                       | DIRECTOR |  USER  |  ADMIN  |
++---------------------------------------------+----------+--------+---------+
+| 1. Xem Dashboard tổng quan, Adset, Ngày     |    Có    |   Có   |   Có    |
+| 2. Xem Báo cáo Tài chính P&L, Tỷ trọng vốn  |    Có    |  Không |  Không  |
+| 3. Chạy mô phỏng What-If chuyển ngân sách   |    Có    |  Không |  Không  |
+| 4. Phê duyệt / Từ chối cấp ngân sách dự án  |    Có    |  Không |  Không  |
+| 5. Xem khuyến nghị phân bổ vốn 70/20/10     |    Có    |  Không |  Không  |
+| 6. Soạn thảo & Gửi đề xuất dự án mới        |  Không   |   Có   |  Không  |
+| 7. Xem trạng thái & Xóa dự án của chính mình|  Không   |   Có   |  Không  |
+| 8. Trò chuyện với Trợ lý Marketing AI       |  Không   |   Có   |  Không  |
+| 9. Nạp tệp dữ liệu mới (.CSV / .TXT / .XLSX)|    Có    |   Có   |   Có    |
+| 10. Tạo tài khoản mới & Gán vai trò (RBAC)  |  Không   |  Không |   Có    |
+| 11. Xem Nhật ký Kiểm toán làm sạch dữ liệu  |  Không   |  Không |   Có    |
+| 12. Cài đặt ngưỡng cảnh báo KPI công ty     |  Không   |  Không |   Có    |
+| 13. Gửi khảo sát nâng cấp tính năng hệ thống|  Không   |  Không |   Có    |
++---------------------------------------------+----------+--------+---------+
+
+
+================================================================================
+IV. GIÁ TRỊ THỰC TIỄN ĐỐI VỚI DOANH NGHIỆP
+================================================================================
+1. Tối ưu hóa quy trình Data-to-Action: Không cần rời rạc qua nhiều phần mềm,
+   dữ liệu được làm sạch, phân tích trực quan, trợ lý AI tham van và lãnh đạo
+   phê duyệt trên một nền tảng thống nhất.
+2. Tránh lãng phí ngân sách quảng cáo: Phát hiện ngay kênh tiêu tốn ngân sách
+   nhưng hiệu quả kém để điều chuyển kịp thời.
+3. Ra quyết định dựa trên dữ liệu (Data-driven): Mọi đề xuất xin ngân sách đều phải
+   gắn liền với số liệu thực tế, ROAS kỳ vọng và được hệ thống tính toán tỷ lệ góp
+   chuẩn xác.
+================================================================================
