@@ -38,26 +38,47 @@ html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, sans-serif;
 }
 .kpi-card {
-    background: #131c31;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #162038;
+    border: 1px solid rgba(99, 102, 241, 0.35);
     border-radius: 12px;
     padding: 16px 18px;
     margin-bottom: 12px;
-    box-shadow: 0 4px 15px -2px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px -2px rgba(0, 0, 0, 0.4);
 }
 .kpi-title {
-    font-size: 0.78rem;
-    font-weight: 600;
+    font-size: 0.82rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #94a3b8;
+    color: #cbd5e1;
     margin-bottom: 6px;
 }
 .kpi-value {
-    font-size: 1.65rem;
+    font-size: 1.75rem;
     font-weight: 800;
     color: #ffffff;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
 }
+
+/* Làm sáng các thẻ st.metric của Streamlit */
+[data-testid="stMetric"] {
+    background: linear-gradient(145deg, #162038, #1e293b) !important;
+    border: 1px solid rgba(148, 163, 184, 0.35) !important;
+    padding: 14px 16px !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+[data-testid="stMetricLabel"] p {
+    color: #cbd5e1 !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+}
+[data-testid="stMetricValue"] div {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
 .badge-status {
     padding: 4px 10px;
     border-radius: 20px;
@@ -65,10 +86,9 @@ html, body, [class*="css"] {
     font-weight: 700;
     display: inline-block;
 }
-.status-pending { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.status-approved { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.status-rejected { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
-[data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.07); padding: 10px 14px; border-radius: 6px;}
+.status-pending { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
+.status-approved { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
+.status-rejected { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); }
 [data-testid="stAppDeployButton"], .stDeployButton {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
@@ -266,11 +286,15 @@ def metric_chart(d, cat, metric, horizontal=False, height=320):
                tooltip=[cat, alt.Tooltip(field=metric, type="quantitative", format=".2f"), "Số chiến dịch"])
     bars = alt.Chart(d).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
         **({"y": ax, "x": val} if horizontal else {"x": ax, "y": val}), **enc)
-    txt_kw = dict(align="left", dx=4) if horizontal else dict(dy=-7)
-    txt = alt.Chart(d).mark_text(fontSize=11, **txt_kw).encode(
+    txt_kw = dict(align="left", dx=5) if horizontal else dict(dy=-8)
+    txt = alt.Chart(d).mark_text(fontSize=12, fontWeight="bold", color="#ffffff", **txt_kw).encode(
         **({"y": ax, "x": val} if horizontal else {"x": ax, "y": val}),
         text=alt.Text(field=metric, type="quantitative", format=".2f"))
-    return (bars + txt).properties(height=height).configure_view(strokeOpacity=0)
+    return (bars + txt).properties(height=height).configure_axis(
+        labelColor="#e2e8f0", titleColor="#f8fafc", gridColor="rgba(255,255,255,0.1)"
+    ).configure_legend(
+        labelColor="#e2e8f0", titleColor="#f8fafc"
+    ).configure_view(strokeOpacity=0)
 
 # ---------------------------------------------------------
 # 4. MÀN HÌNH ĐĂNG NHẬP (NẾU CHƯA ĐĂNG NHẬP)
@@ -288,15 +312,16 @@ def login_screen():
     )
     _, col2, _ = st.columns([1, 1.15, 1])
     with col2:
-        with st.container(border=True):
+        with st.form("login_form"):
             st.markdown("#### 🔐 Đăng nhập Workspace")
             username = st.text_input("Tên đăng nhập", placeholder="director / user / admin", value="director")
             password = st.text_input("Mật khẩu", type="password", value="123")
 
-            if st.button("Truy Cập Hệ Thống ➔", type="primary", use_container_width=True):
+            submitted = st.form_submit_button("Truy Cập Hệ Thống ➔", type="primary", use_container_width=True)
+            if submitted:
                 users = st.session_state.users_db
-                if username in users and users[username]["password"] == password:
-                    st.session_state.user_info = users[username]
+                if username.strip() in users and users[username.strip()]["password"] == password:
+                    st.session_state.user_info = users[username.strip()]
                     st.rerun()
                 else:
                     st.error("Tên đăng nhập hoặc mật khẩu không chính xác!")
@@ -388,7 +413,7 @@ with st.sidebar:
         pending_n = sum(1 for p in st.session_state.proposals if p["status"] == "Chờ duyệt")
         menu_approve = f"📑 Phê Duyệt & Cấp Ngân Sách ({pending_n} chờ)"
         nav_options.insert(1, menu_approve)
-        nav_options.insert(2, "💼 Khuyến Nghị Phân Bổ 70/20/10")
+        # nav_options.insert(2, "💼 Khuyến Nghị Phân Bổ 70/20/10")
     elif role == "user":
         my_count = sum(1 for p in st.session_state.proposals if p.get("creator") == user["name"])
         menu_my_props = f"📋 Đề Xuất Của Tôi ({my_count})"
@@ -496,8 +521,16 @@ if selected_menu == "📊 Dashboard Tổng Quan":
         y=alt.Y("Tỉ trọng (%):Q", title="Tỉ trọng đóng góp (%)"),
         color=alt.Color("Loại:N", scale=alt.Scale(range=["#ef4444", "#3b82f6"]))
     )
-    lab = base.mark_text(dy=-7, fontSize=11).encode(y="Tỉ trọng (%):Q", text=alt.Text("Tỉ trọng (%):Q", format=".1f"))
-    st.altair_chart((bars + lab).properties(height=340), use_container_width=True)
+    lab = base.mark_text(dy=-8, fontSize=12, fontWeight="bold", color="#ffffff").encode(
+        y="Tỉ trọng (%):Q",
+        text=alt.Text("Tỉ trọng (%):Q", format=".1f")
+    )
+    chart_overview = (bars + lab).properties(height=340).configure_axis(
+        labelColor="#e2e8f0", titleColor="#f8fafc", gridColor="rgba(255,255,255,0.1)"
+    ).configure_legend(
+        labelColor="#e2e8f0", titleColor="#f8fafc"
+    ).configure_view(strokeOpacity=0)
+    st.altair_chart(chart_overview, use_container_width=True)
 
 # =========================================================
 # CHỨC NĂNG: GIÁM ĐỐC - PHÊ DUYỆT DỰ ÁN
@@ -804,8 +837,9 @@ elif selected_menu == "🎯 Phân Tích Ad Set":
     pv = pv.melt("ad_set_group", var_name="platform", value_name="ROAS").dropna()
     hm = alt.Chart(pv).mark_rect().encode(x=alt.X("platform:N", title=""), y=alt.Y("ad_set_group:N", title=""),
                                           color=alt.Color("ROAS:Q", scale=alt.Scale(scheme="yellowgreenblue")))
-    tx = alt.Chart(pv).mark_text(fontSize=12).encode(x="platform:N", y="ad_set_group:N", text=alt.Text("ROAS:Q", format=".2f"))
-    st.altair_chart((hm + tx).properties(height=300), width="stretch")
+    tx = alt.Chart(pv).mark_text(fontSize=12, fontWeight="bold", color="#ffffff").encode(
+        x="platform:N", y="ad_set_group:N", text=alt.Text("ROAS:Q", format=".2f")
+    )
 
 elif selected_menu == "⏱️ Xu Hướng Thời Gian":
     dd = df.dropna(subset=["date"])
