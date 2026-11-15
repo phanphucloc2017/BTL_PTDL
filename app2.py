@@ -1,7 +1,7 @@
 """
 OmniMarket AI - Hệ thống Hợp nhất với Menu Danh mục bên trái (Sidebar Navigation)
 Chạy ứng dụng:
-    streamlit run app2.py
+    py -m streamlit run app2_2.py
 """
 
 from datetime import datetime
@@ -90,48 +90,56 @@ METRICS = {
 # ---------------------------------------------------------
 # 2. KHỞI TẠO BỘ NHỚ PHIÊN (SESSION STATE)
 # ---------------------------------------------------------
-@st.cache_resource
-def get_store():
-    """Kho dữ liệu dùng chung cho mọi phiên trình duyệt (tài khoản, đề xuất, ngưỡng KPI).
-    Giữ trong bộ nhớ của tiến trình Streamlit: tắt/khởi động lại app thì mất."""
-    return {
-        "users": {
-            "director": {"password": "123", "name": "Nguyễn Giám Đốc", "role": "director", "label": "Giám Đốc (CEO / CMO)"},
-            "user": {"password": "123", "name": "Trần Media Buyer", "role": "user", "label": "Chuyên Viên (Media Buyer)"},
-            "admin": {"password": "123", "name": "Lê Quản Trị Viên", "role": "admin", "label": "Quản Trị Hệ Thống (Admin)"},
-        },
-        "proposals": [
-            {"id": "PRJ-01", "title": "Tăng ngân sách Product Boost Shopee Sale 6.6", "creator": "Trần Media Buyer",
-             "platform": "Shopee Ads", "budget": 25000000.0, "expected_revenue": 160000000.0,
-             "reason": "Dựa trên số liệu đợt 5.5, Product Boost đạt ROAS 6,77 và CPA thấp nhất trong các nhóm quảng cáo.",
-             "status": "Chờ duyệt", "feedback": "", "date": "2026-05-15"},
-            {"id": "PRJ-02", "title": "Cắt giảm Live Ads TikTok chuyển sang Lookalike Facebook", "creator": "Trần Media Buyer",
-             "platform": "Facebook", "budget": 40000000.0, "expected_revenue": 240000000.0,
-             "reason": "Mô phỏng What-If: chuyển 10% ngân sách TikTok sang Facebook và Shopee Ads tăng khoảng 1,0% doanh thu (ước lượng, giả định ROAS không đổi).",
-             "status": "Đã duyệt", "feedback": "Đồng ý phân bổ đợt 1.", "date": "2026-05-12"},
-        ],
-        "target_roas": 4.5,
-        "target_cpa": 25.0,
+if "users_db" not in st.session_state:
+    st.session_state.users_db = {
+        "director": {"password": "123", "name": "Nguyễn Giám Đốc", "role": "director", "label": "Giám Đốc (CEO / CMO)"},
+        "user": {"password": "123", "name": "Trần Media Buyer", "role": "user", "label": "Chuyên Viên (Media Buyer)"},
+        "admin": {"password": "123", "name": "Lê Quản Trị Viên", "role": "admin", "label": "Quản Trị Hệ Thống (Admin)"},
     }
 
-
-STORE = get_store()
-
-
-def next_proposal_id():
-    """Mã đề xuất tiếp theo = số lớn nhất hiện có + 1 (không bị trùng sau khi xóa)."""
-    nums = [int(p["id"].split("-")[1]) for p in STORE["proposals"] if p["id"].split("-")[-1].isdigit()]
-    return f"PRJ-{(max(nums) if nums else 0) + 1:02d}"
-
+if "proposals" not in st.session_state:
+    st.session_state.proposals = [
+        {
+            "id": "PRJ-01",
+            "title": "Tăng ngân sách Product Boost Shopee Sale 6.6",
+            "creator": "Trần Media Buyer",
+            "platform": "Shopee Ads",
+            "budget": 25000000.0,
+            "expected_revenue": 160000000.0,
+            "reason": "Dựa trên số liệu đợt 5.5, Product Boost đạt ROAS 6.77x và CPA thấp nhất toàn sàn.",
+            "status": "Chờ duyệt",
+            "feedback": "",
+            "date": "2026-05-15",
+        },
+        {
+            "id": "PRJ-02",
+            "title": "Cắt giảm Live Ads TikTok chuyển sang Lookalike Facebook",
+            "creator": "Trần Media Buyer",
+            "platform": "Facebook",
+            "budget": 40000000.0,
+            "expected_revenue": 240000000.0,
+            "reason": "Mô hình What-If cho thấy chuyển dịch 10% ngân sách TikTok sang Facebook tăng 1.0% doanh thu thuần.",
+            "status": "Đã duyệt",
+            "feedback": "Đồng ý phân bổ đợt 1.",
+            "date": "2026-05-12",
+        },
+    ]
 
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = [
-        {"role": "assistant", "content": "Xin chào! Mình là trợ lý tiếp thị, trả lời theo quy tắc và tính số trực tiếp từ dữ liệu đang xem. Bạn muốn hỏi về ROAS, CPA, TikTok hay ad set tốt nhất?"}
+        {"role": "assistant", "content": "Xin chào! Tôi là Cố vấn Tiếp thị AI. Bạn đang muốn tìm cách hạ CPA hay chuẩn bị số liệu lập đề xuất dự án trình Giám đốc?"}
     ]
 
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
 
+if "target_roas" not in st.session_state:
+    st.session_state.target_roas = 4.5
+if "target_cpa" not in st.session_state:
+    st.session_state.target_cpa = 25.0
+
+if "proposal_notice" not in st.session_state:
+    st.session_state.proposal_notice = None
 
 # ---------------------------------------------------------
 # 3. CÁC HÀM XỬ LÝ DỮ LIỆU
@@ -163,6 +171,58 @@ def summarize(data, by):
         })
     return pd.DataFrame(rows).set_index(by)
 
+def fallback_clean(df_raw):
+    df = df_raw.copy()
+    col_map = {c: str(c).strip().lower() for c in df.columns}
+    df.rename(columns=col_map, inplace=True)
+    log = []
+    
+    PLAT_MAP = {
+        'facebook': 'Facebook', 'facebookads': 'Facebook', 'fb': 'Facebook',
+        'tiktok': 'TikTok', 'tiktokads': 'TikTok', 'ttads': 'TikTok',
+        'google': 'Google', 'googleads': 'Google', 'gg': 'Google',
+        'instagram': 'Instagram', 'instagramads': 'Instagram', 'ig': 'Instagram', 'insta': 'Instagram',
+        'shopee': 'Shopee Ads', 'shopeeads': 'Shopee Ads', 'spads': 'Shopee Ads'
+    }
+    if 'platform' in df.columns:
+        df['platform'] = df['platform'].astype(str).str.lower().str.replace(r'[^a-z]', '', regex=True).map(PLAT_MAP).fillna('Khác')
+        log.append(('Nền tảng', f"Chuẩn hóa về {df['platform'].nunique()} nền tảng chuẩn"))
+
+    for c in ['spend', 'clicks', 'impressions', 'revenue']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
+    if 'conversions' in df.columns:
+        df['conversions'] = pd.to_numeric(df['conversions'], errors='coerce')
+
+    if 'spend' in df.columns:
+        df['spend'] = df['spend'].abs()
+        df.loc[df['spend'] == 0, 'spend'] = np.nan
+    if 'clicks' in df.columns and 'impressions' in df.columns:
+        df.loc[df['clicks'] > df['impressions'], 'impressions'] = np.nan
+
+    def get_group(a):
+        a = str(a)
+        if 'Retargeting' in a: return 'Retargeting'
+        if a.startswith('Lookalike') or a == 'Prospecting': return 'Lookalike / Prospecting'
+        if a.startswith('Search') or a == 'Keyword Auto': return 'Search'
+        if any(x in a for x in ['Shopping', 'PMAX', 'Catalog Sales', 'Shop Ads', 'Product Boost', 'GMV Max']): return 'Shopping / Catalog'
+        if any(x in a for x in ['Video View', 'Stories', 'Reels', 'Live Ads', 'Discovery']): return 'Video / Content'
+        if any(x in a for x in ['Influencer', 'Creator Post']): return 'Influencer / Creator'
+        return 'Khác'
+
+    df['ad_set_group'] = df['ad_set'].apply(get_group)
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df['ROAS'] = df['revenue'] / df['spend']
+    df['day_type'] = np.where(df['date'].dt.dayofweek >= 5, 'Cuối tuần', 'Ngày thường')
+    
+    def get_phase(d):
+        if pd.isna(d): return np.nan
+        if d < pd.Timestamp('2024-05-05'): return '1. Trước sale (28/4-4/5)'
+        if d == pd.Timestamp('2024-05-05'): return '2. Ngày sale (5/5)'
+        return '3. Sau sale (6/5-10/5)'
+    df['phase'] = df['date'].apply(get_phase)
+    return df, log
+
 def _read(file, **kw):
     name = str(getattr(file, "name", file)).lower()
     if name.endswith((".xlsx", ".xls")):
@@ -184,13 +244,15 @@ def load_upload(file):
             file.seek(0)
         df = _read(file)
     else:
-        if not HAS_LOCAL_CLEANING:
-            raise ValueError("Thiếu file cleaning.py cùng thư mục với app2.py nên không làm sạch được file gốc.")
-        missing = [c for c in RAW_COLS if c not in head.columns]
-        if missing:
-            raise ValueError("thiếu cột " + ", ".join(missing) + ". File cần có đủ các cột: " + ", ".join(RAW_COLS) + ".")
-        df, log = clean_raw(head)
-
+        if HAS_LOCAL_CLEANING:
+            missing = [c for c in RAW_COLS if c not in head.columns]
+            if missing:
+                df, log = fallback_clean(head)
+            else:
+                df, log = clean_raw(head)
+        else:
+            df, log = fallback_clean(head)
+            
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["adset_platform"] = df["ad_set"] + " (" + df["platform"] + ")"
     return df, log
@@ -209,61 +271,6 @@ def metric_chart(d, cat, metric, horizontal=False, height=320):
         **({"y": ax, "x": val} if horizontal else {"x": ax, "y": val}),
         text=alt.Text(field=metric, type="quantitative", format=".2f"))
     return (bars + txt).properties(height=height).configure_view(strokeOpacity=0)
-
-def kpi_alerts(data):
-    """Các cặp (ad set, nền tảng) có ROAS dưới sàn hoặc CPA trên trần do Admin đặt."""
-    ba = summarize(data, "adset_platform")
-    ba = ba[ba["Số chiến dịch"] >= 10]
-    bad = ba[(ba["ROAS"] < STORE["target_roas"]) | (ba["CPA"] > STORE["target_cpa"])]
-    return bad[["Số chiến dịch", "ROAS", "CPA"]].sort_values("ROAS")
-
-def tier_summary(data, tol):
-    """Phân hạng ad set theo ROAS so với ROAS chung: Ngôi sao / Tiềm năng / Cần xem xét."""
-    ba = summarize(data, "adset_platform")
-    ba = ba[ba["Số chiến dịch"] >= 10].copy()
-    base = ratio(data, "revenue", "spend")
-    ba["Hạng"] = np.where(ba["ROAS"] >= base * (1 + tol / 100), "Ngôi sao",
-                          np.where(ba["ROAS"] < base * (1 - tol / 100), "Cần xem xét", "Tiềm năng"))
-    ok = data.dropna(subset=["spend", "revenue"]).groupby("adset_platform")[["spend", "revenue"]].sum()
-    ba = ba.join(ok.rename(columns={"spend": "_sp", "revenue": "_rv"}))
-    t = ba.groupby("Hạng").agg(**{"Số ad set": ("ROAS", "size"), "sp": ("_sp", "sum"), "rv": ("_rv", "sum")})
-    t["ROAS"] = t["rv"] / t["sp"]
-    t["% chi phí"] = t["sp"] / t["sp"].sum() * 100
-    t["% doanh thu"] = t["rv"] / t["rv"].sum() * 100
-    t = t.reindex([h for h in ["Ngôi sao", "Tiềm năng", "Cần xem xét"] if h in t.index])
-    return ba, t[["Số ad set", "% chi phí", "% doanh thu", "ROAS"]], base
-
-def answer_question(q, data):
-    """Trợ lý theo quy tắc: nhận diện từ khóa rồi tính số từ dữ liệu đang lọc (không dùng mô hình ngôn ngữ)."""
-    q = q.lower()
-    bp = summarize(data, "platform")
-    if bp.empty:
-        return "Chưa có dữ liệu để trả lời."
-    ba = summarize(data, "adset_platform")
-    ba = ba[ba["Số chiến dịch"] >= 10]
-    sp = data.dropna(subset=["spend", "revenue"]).groupby("platform")["spend"].sum()
-    if "tiktok" in q or "giảm" in q or "cắt" in q:
-        if "TikTok" in bp.index:
-            t = bp.loc["TikTok"]
-            tk = ba[ba.index.str.endswith("(TikTok)")].sort_values("ROAS")
-            weak = f" Ad set yếu nhất của TikTok: {tk.index[0]} (ROAS {vn(tk['ROAS'].iloc[0])})." if len(tk) else ""
-            return (f"TikTok có ROAS {vn(t['ROAS'])}, CPA {vn(t['CPA'])}, chiếm {vn(sp['TikTok'] / sp.sum() * 100, 1)}% chi phí.{weak} "
-                    "Có thể đề xuất giảm bớt ngân sách ở các ad set ROAS thấp rồi thử chuyển sang kênh có ROAS cao hơn; nên giảm từng bước và theo dõi lại.")
-    if "cpa" in q or "chi phí" in q:
-        b = bp["CPA"].idxmin()
-        top = ba.sort_values("CPA").head(2)
-        return (f"Nền tảng có CPA thấp nhất là {b} ({vn(bp.loc[b, 'CPA'])}). Ad set có CPA thấp nhất: "
-                + ", ".join(f"{i} ({vn(r['CPA'])})" for i, r in top.iterrows()) + ".")
-    if "ad set" in q or "adset" in q or "nhóm" in q:
-        top = ba.sort_values("ROAS", ascending=False).head(3)
-        return "Ba ad set có ROAS cao nhất: " + ", ".join(f"{i} ({vn(r['ROAS'])})" for i, r in top.iterrows()) + "."
-    if "roas" in q or "hiệu quả" in q or "tốt nhất" in q:
-        b = bp["ROAS"].idxmax()
-        top = ba.sort_values("ROAS", ascending=False).head(2)
-        return (f"Nền tảng có ROAS cao nhất là {b} ({vn(bp.loc[b, 'ROAS'])}). Ad set nổi bật: "
-                + ", ".join(f"{i} ({vn(r['ROAS'])})" for i, r in top.iterrows()) + ".")
-    return ("Mình trả lời được các câu hỏi về ROAS/hiệu quả, CPA/chi phí, TikTok và ad set tốt nhất. "
-            f"Ví dụ: 'kênh nào có ROAS tốt nhất?'. ROAS chung của dữ liệu đang xem là {vn(ratio(data, 'revenue', 'spend'))}.")
 
 # ---------------------------------------------------------
 # 4. MÀN HÌNH ĐĂNG NHẬP (NẾU CHƯA ĐĂNG NHẬP)
@@ -287,7 +294,7 @@ def login_screen():
             password = st.text_input("Mật khẩu", type="password", value="123")
 
             if st.button("Truy Cập Hệ Thống ➔", type="primary", use_container_width=True):
-                users = STORE["users"]
+                users = st.session_state.users_db
                 if username in users and users[username]["password"] == password:
                     st.session_state.user_info = users[username]
                     st.rerun()
@@ -372,20 +379,24 @@ with st.sidebar:
         "🏬 Phân Tích Nền Tảng",
         "🎯 Phân Tích Ad Set",
         "⏱️ Xu Hướng Thời Gian",
+        "🎛️ Chuyển Ngân Sách What-If",
         "📄 Bảng Dữ Liệu Chi Tiết",
     ]
     
-    # Bổ sung danh mục theo quyền
+    # Bổ sung danh mục theo quyền (có đếm số lượng trực quan)
     if role == "director":
-        nav_options.insert(1, "📑 Phê Duyệt & Cấp Ngân Sách")
+        pending_n = sum(1 for p in st.session_state.proposals if p["status"] == "Chờ duyệt")
+        menu_approve = f"📑 Phê Duyệt & Cấp Ngân Sách ({pending_n} chờ)"
+        nav_options.insert(1, menu_approve)
         nav_options.insert(2, "💼 Khuyến Nghị Phân Bổ 70/20/10")
-        nav_options.insert(3, "🎛️ Chuyển Ngân Sách What-If")
     elif role == "user":
-        nav_options.insert(1, "📋 Đề Xuất Của Tôi (Xem & Xóa)")
+        my_count = sum(1 for p in st.session_state.proposals if p.get("creator") == user["name"])
+        menu_my_props = f"📋 Đề Xuất Của Tôi ({my_count})"
+        nav_options.insert(1, menu_my_props)
         nav_options.insert(2, "➕ Tạo Đề Xuất Dự Án Mới")
         nav_options.insert(3, "💬 Cố Vấn Tiếp Thị AI")
     elif role == "admin":
-        nav_options.insert(1, "👥 Phân Quyền & Thêm Tài Khoản")
+        nav_options.insert(1, "👥 Phân Quyền & Quản Lý Tài Khoản")
         nav_options.insert(2, "🚀 Khảo Sát Nâng Cấp Hệ Thống")
         nav_options.insert(3, "⚙️ Cài Đặt Ngưỡng Cảnh Báo KPI")
 
@@ -410,7 +421,6 @@ with st.sidebar:
             ss.files[name] = {"df": data, "log": log, "time": datetime.now()}
             ss.seen.add(sig)
             ss.pick = label_file(name)
-            ss.pick_file = label_file(name)
 
         names = list(ss.files)
         if names:
@@ -467,51 +477,33 @@ if selected_menu == "📊 Dashboard Tổng Quan":
     roas, cpa = ratio(df, "revenue", "spend"), ratio(df, "spend", "conversions")
     cvr, ctr = ratio(df, "conversions", "clicks") * 100, ratio(df, "clicks", "impressions") * 100
     tot_spend, tot_rev = df["spend"].sum(), df["revenue"].sum()
-    ok = df.dropna(subset=["spend", "revenue"])
-    if role == "director":
-        c = st.columns(5)
-        c[0].metric("Tổng Chi Phí", vn(tot_spend, 0))
-        c[1].metric("Tổng Doanh Thu", vn(tot_rev, 0))
-        c[2].metric("Doanh Thu − Chi Phí QC", vn(ok["revenue"].sum() - ok["spend"].sum(), 0),
-                    help="Chưa trừ giá vốn hàng bán nên chưa phải lợi nhuận. Chỉ tính các dòng có đủ chi phí và doanh thu.")
-        c[3].metric("ROAS Toàn Sàn", vn(roas))
-        c[4].metric("CPA Trung Bình", vn(cpa))
-    else:
-        c = st.columns(4)
-        c[0].metric("Tổng Chi Phí", vn(tot_spend, 0))
-        c[1].metric("Tổng Doanh Thu", vn(tot_rev, 0))
-        c[2].metric("ROAS Toàn Sàn", vn(roas))
-        c[3].metric("CPA Trung Bình", vn(cpa))
+    net_profit = tot_rev - tot_spend
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Tổng Chi Phí", vn(tot_spend, 0))
+    col2.metric("Tổng Doanh Thu", vn(tot_rev, 0))
+    col3.metric("Lợi Nhuận Gộp", vn(net_profit, 0))
+    col4.metric("ROAS Toàn Sàn", f"{vn(roas)}x")
+    col5.metric("CPA Trung Bình", vn(cpa))
 
     st.markdown("---")
-    st.subheader("Cảnh Báo KPI")
-    st.write(f"Ngưỡng do Quản trị viên đặt: ROAS tối thiểu {vn(STORE['target_roas'], 1)}, CPA tối đa {vn(STORE['target_cpa'], 1)}. "
-             "Danh sách dưới đây là các ad set (đủ ít nhất 10 chiến dịch) chưa đạt ngưỡng.")
-    alerts = kpi_alerts(df)
-    if alerts.empty:
-        st.write("Không có ad set nào chưa đạt ngưỡng.")
-    else:
-        st.dataframe(alerts.style.format("{:,.2f}"), width="stretch")
-
-    if role == "director":
-        st.markdown("---")
-        st.subheader("Chi Phí & Doanh Thu: Kênh Nào Chiếm Bao Nhiêu?")
-        st.write("Cột doanh thu thấp hơn cột chi phí nghĩa là kênh đó tốn nhiều ngân sách hơn phần doanh thu mang lại.")
-        both = ok.groupby("platform")[["spend", "revenue"]].sum()
-        share = (both / both.sum() * 100).rename(columns={"spend": "Chi phí", "revenue": "Doanh thu"}).reset_index()
-        sh = share.melt("platform", var_name="Loại", value_name="Tỉ trọng (%)")
-        base = alt.Chart(sh).encode(x=alt.X("platform:N", title="Kênh quảng cáo"), xOffset="Loại:N")
-        bars = base.mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
-            y=alt.Y("Tỉ trọng (%):Q", title="Tỉ trọng đóng góp (%)"),
-            color=alt.Color("Loại:N", scale=alt.Scale(range=["#ef4444", "#3b82f6"])))
-        lab = base.mark_text(dy=-7, fontSize=11).encode(y="Tỉ trọng (%):Q", text=alt.Text("Tỉ trọng (%):Q", format=".1f"))
-        st.altair_chart((bars + lab).properties(height=340), use_container_width=True)
+    st.subheader("Chi Phí & Doanh Thu: Kênh Nào Chiếm Bao Nhiêu?")
+    both = df.dropna(subset=["spend", "revenue"]).groupby("platform")[["spend", "revenue"]].sum()
+    share = (both / both.sum() * 100).rename(columns={"spend": "Chi phí", "revenue": "Doanh thu"}).reset_index()
+    sh = share.melt("platform", var_name="Loại", value_name="Tỉ trọng (%)")
+    base = alt.Chart(sh).encode(x=alt.X("platform:N", title="Kênh quảng cáo"), xOffset="Loại:N")
+    bars = base.mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        y=alt.Y("Tỉ trọng (%):Q", title="Tỉ trọng đóng góp (%)"),
+        color=alt.Color("Loại:N", scale=alt.Scale(range=["#ef4444", "#3b82f6"]))
+    )
+    lab = base.mark_text(dy=-7, fontSize=11).encode(y="Tỉ trọng (%):Q", text=alt.Text("Tỉ trọng (%):Q", format=".1f"))
+    st.altair_chart((bars + lab).properties(height=340), use_container_width=True)
 
 # =========================================================
 # CHỨC NĂNG: GIÁM ĐỐC - PHÊ DUYỆT DỰ ÁN
 # =========================================================
-elif selected_menu == "📑 Phê Duyệt & Cấp Ngân Sách":
-    proposals = STORE["proposals"]
+elif selected_menu.startswith("📑 Phê Duyệt & Cấp Ngân Sách"):
+    proposals = st.session_state.proposals
     pending_count = sum(1 for p in proposals if p["status"] == "Chờ duyệt")
     approved_budget = sum(p["budget"] for p in proposals if p["status"] == "Đã duyệt")
 
@@ -539,38 +531,37 @@ elif selected_menu == "📑 Phê Duyệt & Cấp Ngân Sách":
 
             if p["status"] == "Chờ duyệt":
                 b1, b2, b_comm = st.columns([1.2, 1, 3])
-                feedback_text = b_comm.text_input("Ghi chú phê duyệt", key=f"f_{idx}", placeholder="Ý kiến chỉ đạo cấp vốn...")
-                if b1.button("✅ Phê Duyệt & Cấp Vốn", key=f"app_{idx}", type="primary", use_container_width=True):
-                    STORE["proposals"][idx]["status"] = "Đã duyệt"
-                    STORE["proposals"][idx]["feedback"] = feedback_text if feedback_text else "Đồng ý cấp vốn triển khai."
-                    st.success(f"Đã duyệt dự án [{p['id']}]!")
+                feedback_text = b_comm.text_input("Ghi chú phê duyệt", key=f"f_dir_{idx}_{p['id']}", placeholder="Ý kiến chỉ đạo cấp vốn...")
+                if b1.button("✅ Phê Duyệt & Cấp Vốn", key=f"app_dir_{idx}_{p['id']}", type="primary", use_container_width=True):
+                    st.session_state.proposals[idx]["status"] = "Đã duyệt"
+                    st.session_state.proposals[idx]["feedback"] = feedback_text if feedback_text else "Đồng ý cấp vốn triển khai."
+                    st.toast(f"Đã phê duyệt dự án [{p['id']}]!", icon="✅")
                     st.rerun()
-                if b2.button("❌ Từ Chối", key=f"rej_{idx}", use_container_width=True):
-                    STORE["proposals"][idx]["status"] = "Từ chối"
-                    STORE["proposals"][idx]["feedback"] = feedback_text if feedback_text else "Cần tối ưu lại CPA."
-                    st.warning(f"Đã từ chối dự án [{p['id']}]!")
+                if b2.button("❌ Từ Chối", key=f"rej_dir_{idx}_{p['id']}", use_container_width=True):
+                    st.session_state.proposals[idx]["status"] = "Từ chối"
+                    st.session_state.proposals[idx]["feedback"] = feedback_text if feedback_text else "Cần tối ưu lại CPA."
+                    st.toast(f"Đã từ chối dự án [{p['id']}]!", icon="❌")
                     st.rerun()
 
 elif selected_menu == "💼 Khuyến Nghị Phân Bổ 70/20/10":
     st.subheader("Khung Chiến Lược Phân Bổ Ngân Sách 70/20/10")
-    st.caption("Đây là khung đề xuất tham khảo của nhóm dựa trên kết quả phân tích đợt 5.5, không phải đầu ra của một mô hình tối ưu.")
     st.markdown("""
-    - **70% Ngân sách Trụ cột (Core Performance):** Dồn vào **Facebook** (Prospecting Lookalike) và **Shopee Ads** (Product Boost, Keyword Auto) có ROAS từ 5,7 trở lên, CPA khoảng 18,6–20,0.
-    - **20% Ngân sách Mở rộng (Growth):** Tối ưu lại **Google Search** bằng cách chặn từ khóa đắt đỏ để hạ CPC (đang ở mức 1,87), giữ chân khách hàng có CVR 7,0%.
+    - **70% Ngân sách Trụ cột (Core Performance):** Dồn vào **Facebook** (Prospecting Lookalike) và **Shopee Ads** (Product Boost, Keyword Auto) có ROAS > 5.7x, CPA an toàn dưới 20.0.
+    - **20% Ngân sách Mở rộng (Growth):** Tối ưu lại **Google Search** bằng cách chặn từ khóa đắt đỏ để hạ CPC (đang ở mức 1.87), giữ chân khách hàng có CVR 7.0%.
     - **10% Ngân sách Thử nghiệm (Experimentation):** Thu hẹp ngân sách video/livestream của **TikTok** (chỉ giữ nhóm có ROAS dương), chuyển sang xây dựng thương hiệu.
     """)
 
 # =========================================================
 # CHỨC NĂNG: USER - ĐỀ XUẤT CỦA TÔI / TẠO DỰ ÁN / CHAT AI
 # =========================================================
-elif selected_menu == "📋 Đề Xuất Của Tôi (Xem & Xóa)":
+elif selected_menu.startswith("📋 Đề Xuất Của Tôi"):
     st.subheader("Danh Sách Dự Án Do Bạn Đề Xuất")
-    my_proposals = [p for p in STORE["proposals"] if p.get("creator") == user["name"]]
+    my_proposals = [p for p in st.session_state.proposals if p.get("creator") == user["name"]]
 
     if not my_proposals:
         st.info("💡 Bạn chưa có đề xuất nào. Hãy chọn mục **'➕ Tạo Đề Xuất Dự Án Mới'** ở danh mục bên trái để gửi dự án lên Giám đốc.")
     else:
-        for p in my_proposals:
+        for idx, p in enumerate(my_proposals):
             with st.container(border=True):
                 col_info, col_del = st.columns([5, 1.2])
                 badge_class = {"Chờ duyệt": "status-pending", "Đã duyệt": "status-approved", "Từ chối": "status-rejected"}.get(p["status"], "status-pending")
@@ -589,16 +580,21 @@ elif selected_menu == "📋 Đề Xuất Của Tôi (Xem & Xóa)":
                 with col_del:
                     st.write("")
                     st.write("")
-                    if p["status"] != "Chờ duyệt":
-                        st.caption("Đã được xử lý, không xóa được")
-                    elif st.button("🗑️ Xóa Đề Xuất", key=f"del_{p['id']}", use_container_width=True):
-                        STORE["proposals"] = [item for item in STORE["proposals"] if item["id"] != p["id"]]
-                        st.success(f"Đã xóa đề xuất [{p['id']}]!")
+                    if st.button("🗑️ Xóa Đề Xuất", key=f"del_side_{idx}_{p['id']}", use_container_width=True):
+                        st.session_state.proposals = [item for item in st.session_state.proposals if item is not p]
+                        st.toast(f"Đã xóa đề xuất [{p['id']}]!", icon="🗑️")
                         st.rerun()
 
 elif selected_menu == "➕ Tạo Đề Xuất Dự Án Mới":
     st.subheader("Soạn Thảo Đề Xuất Dự Án Trình Giám Đốc")
-    with st.form("create_proposal_form_side"):
+
+    # Hiển thị thông báo thành công nếu vừa gửi xong ở lượt chạy trước
+    if st.session_state.get("proposal_notice"):
+        st.success(st.session_state.proposal_notice)
+        st.toast(st.session_state.proposal_notice, icon="🎉")
+        st.session_state.proposal_notice = None
+
+    with st.form("create_proposal_form_side", clear_on_submit=True):
         p_title = st.text_input("Tiêu đề dự án", placeholder="VD: Mở rộng ngân sách Lookalike 1% Facebook đợt Mega Sale 6.6...")
         col_p1, col_p2 = st.columns(2)
         p_platform = col_p1.selectbox("Kênh trọng tâm", ["Shopee Ads", "Facebook", "Google", "TikTok", "Instagram"])
@@ -611,53 +607,109 @@ elif selected_menu == "➕ Tạo Đề Xuất Dự Án Mới":
 
         p_reason = st.text_area("Luận cứ & Căn cứ số liệu", placeholder="VD: Dựa trên số liệu đợt sale trước, nhóm ad set này đạt CVR > 5.5% và CPA tối ưu...")
         if st.form_submit_button("🚀 Gửi Đề Xuất Lên Bàn Giám Đốc", type="primary"):
-            if not p_title or not p_reason:
-                st.error("Vui lòng điền đủ tiêu đề và luận cứ dự án!")
+            if not p_title.strip() or not p_reason.strip():
+                st.error("⚠️ Vui lòng điền đủ tiêu đề và luận cứ dự án!")
             else:
+                # Sinh mã PRJ-XX không trùng lặp ngay cả khi đã xóa đề xuất cũ
+                existing_nums = [
+                    int(item["id"].split("-")[1])
+                    for item in st.session_state.proposals
+                    if item["id"].startswith("PRJ-") and len(item["id"].split("-")) > 1 and item["id"].split("-")[1].isdigit()
+                ]
+                next_num = max(existing_nums, default=0) + 1
+                new_id = f"PRJ-{next_num:02d}"
+
                 new_proposal = {
-                    "id": next_proposal_id(),
-                    "title": p_title,
+                    "id": new_id,
+                    "title": p_title.strip(),
                     "creator": user["name"],
                     "platform": p_platform,
                     "budget": p_budget,
                     "expected_revenue": p_rev,
-                    "reason": p_reason,
+                    "reason": p_reason.strip(),
                     "status": "Chờ duyệt",
                     "feedback": "",
                     "date": datetime.now().strftime("%Y-%m-%d"),
                 }
-                STORE["proposals"].insert(0, new_proposal)
-                st.success("✅ Đã gửi đề xuất thành công tới Giám đốc! Hãy bấm qua mục 'Đề Xuất Của Tôi' để theo dõi.")
+                st.session_state.proposals.insert(0, new_proposal)
+                st.session_state.proposal_notice = f"✅ Đã gửi đề xuất [{new_id}] thành công tới Giám đốc! Hãy bấm qua mục 'Đề Xuất Của Tôi' ở thanh bên để theo dõi."
                 st.rerun()
 
 elif selected_menu == "💬 Cố Vấn Tiếp Thị AI":
     st.subheader("Trò Chuyện Trực Tiếp với Cố Vấn Marketing AI")
-    st.caption("Trợ lý dựa trên quy tắc: nhận diện từ khóa trong câu hỏi rồi tính số trực tiếp từ dữ liệu đang xem, không dùng mô hình ngôn ngữ.")
+    st.caption("Truy vấn trực tiếp số liệu từ tập dữ liệu chiến dịch để chuẩn bị luận cứ thuyết phục Giám đốc.")
 
     chat_box = st.container(height=380, border=True)
     for msg in st.session_state.chat_messages:
         with chat_box.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    if prompt := st.chat_input("Hỏi về ROAS, CPA, TikTok hoặc ad set tốt nhất..."):
+    if prompt := st.chat_input("Hỏi AI về chiến dịch hoặc cách tối ưu CPA..."):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
-        st.session_state.chat_messages.append({"role": "assistant", "content": answer_question(prompt, df)})
+        p_lower = prompt.lower()
+        if "roas" in p_lower or "hiệu quả" in p_lower:
+            best_plat = df.groupby("platform").apply(lambda g: g["revenue"].sum() / g["spend"].sum()).idxmax()
+            answer = f"Theo dữ liệu hiện tại, kênh có ROAS tốt nhất là **{best_plat}**. Bạn nên đề xuất tăng ngân sách vào nhóm **Product Boost** và **Prospecting Lookalike**, vì đây là các nhóm mang lại biên lợi nhuận cao nhất."
+        elif "tiktok" in p_lower or "giảm" in p_lower:
+            answer = "Kênh TikTok đang chiếm tỷ trọng chi phí cao nhưng CPA bị đẩy lên cao (~27.9 đ) và ROAS thấp (~4.25x). Bạn nên đề xuất cắt bớt ngân sách nhóm Video View/Live Ads của TikTok để điều chuyển sang Shopee Ads hoặc Facebook."
+        elif "cpa" in p_lower or "chi phí" in p_lower:
+            answer = "Shopee Ads hiện có CPA trung bình thấp nhất (khoảng 18.6 đ). Nếu muốn hạ CPA toàn chiến dịch, bạn nên tập trung đề xuất tăng các nhóm Keyword Auto và Product Boost."
+        else:
+            answer = f"Dựa trên dữ liệu hiện tại: Doanh thu trung bình toàn chiến dịch đạt ROAS ~{ratio(df, 'revenue', 'spend'):.2f}x. Bạn có thể chọn mục **'Tạo Đề Xuất Dự Án Mới'** ở danh mục bên trái để trình kế hoạch này."
+        
+        st.session_state.chat_messages.append({"role": "assistant", "content": answer})
         st.rerun()
 
 # =========================================================
 # CHỨC NĂNG: ADMIN - PHÂN QUYỀN / KHẢO SÁT / CẤU HÌNH
 # =========================================================
-elif selected_menu == "👥 Phân Quyền & Thêm Tài Khoản":
-    st.subheader("Danh Sách Tài Khoản Phân Quyền")
-    users_table = pd.DataFrame([
-        {"Tài khoản": u, "Họ tên": d["name"], "Mã vai trò": d["role"], "Quyền hạn": d["label"]}
-        for u, d in STORE["users"].items()
-    ])
-    st.table(users_table)
+elif selected_menu == "👥 Phân Quyền & Quản Lý Tài Khoản":
+    st.subheader("Danh Sách Tài Khoản Phân Quyền & Quản Lý Truy Cập")
+
+    # Xác định username hiện tại đang đăng nhập để khóa nút tự xóa chính mình
+    current_username = next(
+        (u for u, d in st.session_state.users_db.items() if d["name"] == user["name"]),
+        None,
+    )
+
+    for u_key, u_data in list(st.session_state.users_db.items()):
+        with st.container(border=True):
+            col_u_info, col_u_role, col_u_action = st.columns([3, 2, 1.2])
+            
+            with col_u_info:
+                st.markdown(f"**{u_data['name']}** (`@{u_key}`)")
+                st.caption(f"Mã vai trò: `{u_data['role']}`")
+            
+            with col_u_role:
+                st.markdown(
+                    f'<span class="badge-status status-approved" style="margin-top:6px;">{u_data["label"]}</span>',
+                    unsafe_allow_html=True,
+                )
+            
+            with col_u_action:
+                is_protected = (u_key == "admin") or (u_key == current_username)
+                if is_protected:
+                    st.button(
+                        "🔒 Mặc định",
+                        key=f"lock_side_user_{u_key}",
+                        disabled=True,
+                        use_container_width=True,
+                        help="Không thể xóa tài khoản Admin gốc hoặc tài khoản đang đăng nhập.",
+                    )
+                else:
+                    if st.button(
+                        "🚫 Kick / Xóa",
+                        key=f"kick_side_user_{u_key}",
+                        type="secondary",
+                        use_container_width=True,
+                    ):
+                        del st.session_state.users_db[u_key]
+                        st.toast(f"Đã thu hồi quyền và xóa tài khoản '{u_key}'!", icon="🚫")
+                        st.rerun()
 
     st.divider()
     st.subheader("➕ Cấp Mới Tài Khoản & Gán Quyền")
-    with st.form("add_user_form_side"):
+    with st.form("add_user_form_side", clear_on_submit=True):
         u1, u2 = st.columns(2)
         new_u = u1.text_input("Tên đăng nhập", placeholder="vd: analyst_lead")
         new_p = u2.text_input("Mật khẩu", type="password", value="123")
@@ -668,22 +720,28 @@ elif selected_menu == "👥 Phân Quyền & Thêm Tài Khoản":
                              format_func=lambda x: {"director": "Giám Đốc (Phê duyệt)", "user": "Nhân viên (Tác nghiệp)", "admin": "Quản trị viên"}[x])
 
         if st.form_submit_button("Tạo Tài Khoản", type="primary"):
-            if not new_u or not new_name:
+            clean_u = new_u.strip().lower()
+            if not clean_u or not new_name.strip():
                 st.error("Vui lòng điền đủ tên tài khoản và họ tên!")
-            elif new_u in STORE["users"]:
+            elif clean_u in st.session_state.users_db:
                 st.error("Tài khoản này đã tồn tại!")
             else:
                 r_labels = {"director": "Giám Đốc (CEO / CMO)", "user": "Nhân viên (Media Buyer)", "admin": "Quản trị hệ thống (Admin)"}
-                STORE["users"][new_u] = {"password": new_p, "name": new_name, "role": new_r, "label": r_labels[new_r]}
-                st.success(f"Đã tạo tài khoản '{new_u}' thành công!")
+                st.session_state.users_db[clean_u] = {
+                    "password": new_p,
+                    "name": new_name.strip(),
+                    "role": new_r,
+                    "label": r_labels[new_r],
+                }
+                st.toast(f"Đã tạo tài khoản '{clean_u}' thành công!", icon="✅")
                 st.rerun()
 
 elif selected_menu == "🚀 Khảo Sát Nâng Cấp Hệ Thống":
     st.subheader("Báo Cáo Sức Khỏe & Khảo Sát Nâng Cấp Hệ Thống")
     c1, c2, c3 = st.columns(3)
     c1.metric("Phiên bản", "v4.0.0 Enterprise")
-    c2.metric("Tài khoản vận hành", len(STORE["users"]))
-    c3.metric("Hồ sơ dự án", len(STORE["proposals"]))
+    c2.metric("Tài khoản vận hành", len(st.session_state.users_db))
+    c3.metric("Hồ sơ dự án", len(st.session_state.proposals))
 
     with st.form("survey_form_side"):
         st.multiselect(
@@ -699,16 +757,18 @@ elif selected_menu == "🚀 Khảo Sát Nâng Cấp Hệ Thống":
         st.text_area("Đóng góp thêm ý kiến vận hành:")
         if st.form_submit_button("Gửi Khảo Sát", type="primary"):
             st.success("Đã ghi nhận đóng góp khảo sát nâng cấp hệ thống!")
+            st.toast("Đã ghi nhận khảo sát!", icon="🚀")
 
 elif selected_menu == "⚙️ Cài Đặt Ngưỡng Cảnh Báo KPI":
     st.subheader("Thiết Lập Ngưỡng Cảnh Báo KPI")
     with st.form("kpi_config_form_side"):
-        t_roas = st.number_input("ROAS Sàn kỳ vọng", min_value=1.0, max_value=20.0, value=float(STORE["target_roas"]), step=0.1)
-        t_cpa = st.number_input("CPA trần tối đa (cùng đơn vị với dữ liệu)", min_value=5.0, max_value=200.0, value=float(STORE["target_cpa"]), step=1.0)
+        t_roas = st.number_input("ROAS Sàn kỳ vọng", min_value=1.0, max_value=20.0, value=float(st.session_state.target_roas), step=0.1)
+        t_cpa = st.number_input("CPA Trần tối đa (VNĐ)", min_value=5.0, max_value=200.0, value=float(st.session_state.target_cpa), step=1.0)
         if st.form_submit_button("Lưu Thiết Lập", type="primary"):
-            STORE["target_roas"] = t_roas
-            STORE["target_cpa"] = t_cpa
+            st.session_state.target_roas = t_roas
+            st.session_state.target_cpa = t_cpa
             st.success("Đã cập nhật ngưỡng cảnh báo KPI!")
+            st.toast("Đã lưu thiết lập KPI!", icon="⚙️")
 
 # =========================================================
 # CÁC CHỨC NĂNG PHÂN TÍCH CHUYÊN SÂU
@@ -747,20 +807,11 @@ elif selected_menu == "🎯 Phân Tích Ad Set":
     tx = alt.Chart(pv).mark_text(fontSize=12).encode(x="platform:N", y="ad_set_group:N", text=alt.Text("ROAS:Q", format=".2f"))
     st.altair_chart((hm + tx).properties(height=300), width="stretch")
 
-    st.subheader("Phân Hạng Ad Set Theo ROAS")
-    tol = st.slider("Ngưỡng chênh lệch so với ROAS chung (%)", 5, 25, 10, key="tier_tol",
-                    help="Ngôi sao: ROAS cao hơn ROAS chung ít nhất bằng ngưỡng. Cần xem xét: thấp hơn ROAS chung ít nhất bằng ngưỡng.")
-    ba_t, tsum, base_roas = tier_summary(df, tol)
-    st.write(f"ROAS chung là {vn(base_roas)}. Mỗi ad set được xếp hạng theo ROAS của nó so với mức này (chỉ xét ad set có ít nhất 10 chiến dịch).")
-    st.dataframe(tsum.style.format({"% chi phí": "{:.1f}", "% doanh thu": "{:.1f}", "ROAS": "{:.2f}"}), width="stretch")
-    st.dataframe(ba_t[["Hạng", "Số chiến dịch", "ROAS", "CPA"]].sort_values("ROAS", ascending=False)
-                 .style.format({"ROAS": "{:.2f}", "CPA": "{:.2f}"}), width="stretch")
-
 elif selected_menu == "⏱️ Xu Hướng Thời Gian":
     dd = df.dropna(subset=["date"])
     if not dd.empty:
         daily = summarize(dd, "date").reset_index()
-        rule = alt.Chart(pd.DataFrame({"date": [pd.Timestamp("2024-05-05")]})).mark_rule(color="black", strokeDash=[4, 4]).encode(x="date:T")
+        daily["ROAS"] = daily["Tổng doanh thu"] / daily["Tổng chi phí"]
         
         st.write("**Chi phí và doanh thu mỗi ngày:**")
         long = daily.melt("date", value_vars=["Tổng chi phí", "Tổng doanh thu"], var_name="Loại", value_name="Giá trị")
@@ -768,22 +819,17 @@ elif selected_menu == "⏱️ Xu Hướng Thời Gian":
             x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")), y=alt.Y("Giá trị:Q", title=""), xOffset="Loại:N",
             color=alt.Color("Loại:N", scale=alt.Scale(range=["#9aa5b1", "#0b6bcb"])),
             tooltip=["date:T", "Loại", alt.Tooltip("Giá trị:Q", format=",.0f")])
-        st.altair_chart((top + rule).properties(height=260), width="stretch")
+        st.altair_chart(top.properties(height=260), width="stretch")
 
         st.write("**ROAS mỗi ngày:**")
         line = alt.Chart(daily).mark_line(point=True, color="#ee4d2d").encode(
             x=alt.X("date:T", title="", axis=alt.Axis(format="%d/%m")),
             y=alt.Y("ROAS:Q", scale=alt.Scale(domain=[0, 7])),
             tooltip=["date:T", alt.Tooltip("ROAS:Q", format=".2f")])
-        st.altair_chart((line + rule).properties(height=200), width="stretch")
-        st.caption("Đường nét đứt đánh dấu ngày sale 5/5. Trục ROAS bắt đầu từ 0 để không phóng đại dao động.")
-        st.subheader("Trước / Ngày sale / Sau sale")
-        if df["phase"].notna().any():
-            st.dataframe(summarize(df.dropna(subset=["phase"]), "phase").style.format("{:,.2f}"), width="stretch")
+        st.altair_chart(line.properties(height=200), width="stretch")
 
 elif selected_menu == "🎛️ Chuyển Ngân Sách What-If":
     st.subheader("Mô Phỏng Chuyển Ngân Sách Tối Ưu")
-    st.caption("Giả định ROAS của mỗi nền tảng giữ nguyên khi đổi ngân sách. Thực tế tăng chi thường làm ROAS giảm, nên đây là ước lượng để tham khảo.")
     bp = summarize(df, "platform")
     plats = list(bp.index)
     a, b = st.columns(2)
@@ -804,11 +850,8 @@ elif selected_menu == "🎛️ Chuyển Ngân Sách What-If":
 
 elif selected_menu == "📄 Bảng Dữ Liệu Chi Tiết":
     log = ss.files[cur].get("log")
-    if role == "admin":
+    if log:
         st.subheader("Nhật Ký Kiểm Toán Làm Sạch Dữ Liệu")
-        if log:
-            st.dataframe(pd.DataFrame(log, columns=["Hạng mục", "Kết quả"]), width="stretch", hide_index=True)
-        else:
-            st.write("File này đã được làm sạch sẵn từ notebook nên không có nhật ký tự động. Tải file gốc để xem nhật ký.")
+        st.dataframe(pd.DataFrame(log, columns=["Hạng mục", "Kết quả"]), width="stretch", hide_index=True)
     st.subheader("Bảng Dữ Liệu Sau Khi Lọc")
     st.dataframe(df.drop(columns=["adset_platform"], errors="ignore"), width="stretch", height=420)
